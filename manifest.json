@@ -1,0 +1,19 @@
+
+{
+  "id": "./",
+  "name": "Dainhat Rash Guide 2026",
+  "short_name": "Dainhat Rash",
+  "description": "Dainhat Rash Guide - Local Road, Railway Stations, Bus Stands, Hospitals and Local Services.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "lang": "bn-IN",
+  "categories": [
+    "navigation",
+    "travel",
+    "utilities"
+  ]
+}
