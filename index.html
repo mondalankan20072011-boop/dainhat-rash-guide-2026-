@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#062d22">
+  <title>DAINHAT RASH GUIDE 2026</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar glass">
+      <div class="brand-mark">DR</div>
+      <div class="brand-copy">
+        <h1>DAINHAT RASH GUIDE 2026</h1>
+        <p>দাঁইহাট লোকেশন ও দিকনির্দেশিকা</p>
+      </div>
+      <button id="adminToggle" class="button button-outline" type="button">Admin Login</button>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">EXPLORE DAINHAT</p>
+          <h2>দাঁইহাটকে খুঁজে নাও সহজে</h2>
+          <p class="muted">শুধু দাঁইহাটের লোকেশন। অন্য এলাকার আলাদা পিন এখানে যোগ করা নেই।</p>
+        </div>
+        <div class="status-pill"><span class="status-dot"></span> OpenStreetMap</div>
+      </section>
+
+      <section class="toolbar glass" aria-label="Map controls">
+        <label class="search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input id="searchInput" type="search" placeholder="লোকেশনের নাম খুঁজুন..." autocomplete="off">
+        </label>
+        <button id="locateBtn" class="button button-primary" type="button">◎ আমার অবস্থান</button>
+      </section>
+
+      <section class="map-card glass">
+        <div class="map-heading">
+          <div>
+            <h3>দাঁইহাট ম্যাপ</h3>
+            <p class="muted small">ম্যাপের রাস্তা OpenStreetMap থেকে লোড হবে</p>
+          </div>
+          <span id="mapMode" class="mode-label">VIEW MODE</span>
+        </div>
+        <div id="map" role="application" aria-label="দাঁইহাটের মানচিত্র"></div>
+        <p class="map-note">নোট: চারটি নির্দিষ্ট স্থানের সঠিক GPS স্থানাঙ্ক এখনো যাচাই করা হয়নি। Admin হিসেবে লগইন করে ম্যাপে সঠিক জায়গায় ক্লিক করে পিন বসাতে হবে।</p>
+      </section>
+
+      <section class="places-section">
+        <div class="section-heading">
+          <div><p class="eyebrow">SAVED PLACES</p><h3>জনপ্রিয় লোকেশন</h3></div>
+          <span id="placeCount" class="count-pill">0 লোকেশন</span>
+        </div>
+        <div id="placesList" class="places-grid"></div>
+      </section>
+
+      <section id="adminPanel" class="admin-panel glass hidden">
+        <div class="section-heading">
+          <div><p class="eyebrow">ADMIN TOOLS</p><h3>লোকেশন ম্যানেজ করুন</h3></div>
+          <button id="logoutBtn" class="button button-outline" type="button">Logout</button>
+        </div>
+        <p class="muted small">Admin Mode চালু থাকলে ম্যাপে ক্লিক করে নতুন পিন যোগ করুন। পিন নির্বাচন করে তথ্য সম্পাদনা বা মুছতে পারবেন।</p>
+        <form id="placeForm" class="place-form">
+          <input id="placeId" type="hidden">
+          <label>লোকেশনের নাম<input id="placeName" required maxlength="90" placeholder="যেমন: নতুন লোকেশন"></label>
+          <label>বিবরণ<textarea id="placeNote" rows="2" maxlength="500" placeholder="লোকেশন সম্পর্কে সংক্ষিপ্ত তথ্য"></textarea></label>
+          <div class="form-actions">
+            <button class="button button-primary" type="submit">Save Location</button>
+            <button id="newPlaceBtn" class="button button-outline" type="button">নতুন করে লিখুন</button>
+            <button id="deletePlaceBtn" class="button button-danger" type="button" disabled>Delete</button>
+          </div>
+        </form>
+        <p id="adminHint" class="hint">প্রথমে ম্যাপে ক্লিক করে নতুন পিনের জায়গা নির্বাচন করুন, অথবা তালিকা থেকে কোনো লোকেশন বেছে নিন।</p>
+      </section>
+    </main>
+
+    <footer><span>DAINHAT RASH GUIDE 2026</span><span>Map data © OpenStreetMap contributors</span></footer>
+  </div>
+
+  <dialog id="loginDialog" class="login-dialog glass">
+    <form id="loginForm" method="dialog">
+      <h3>Admin Login</h3>
+      <p class="muted small">এই Starter সংস্করণে লোকাল ডেমো লগইন। প্রকাশের আগে সার্ভার-ভিত্তিক নিরাপদ লগইন আবশ্যক।</p>
+      <label>Admin password<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+      <p id="loginError" class="error" aria-live="polite"></p>
+      <div class="form-actions">
+        <button class="button button-primary" value="login">Login</button>
+        <button id="cancelLogin" class="button button-outline" value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
