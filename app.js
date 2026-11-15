@@ -4,7 +4,7 @@
 (() => {
   "use strict";
   const STORAGE_KEY = "dainhat-rash-guide-places-v1";
-  const DEMO_ADMIN_PASSWORD = 565648
+  const DEMO_ADMIN_PASSWORD =ANKAN555666
   const initialPlaces = [
     {id:"seed-1",name:"সাহাপাড়া নাগরিক মঞ্চ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false},
     {id:"seed-2",name:"ছোটঠাকুরুন তলা",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false},
