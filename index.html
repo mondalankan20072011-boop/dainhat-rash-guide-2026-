@@ -52,16 +52,20 @@
 
       <section class="places-section">
         <section class="category-section">
-  <button class="category-btn active" data-category="all">সব জায়গা</button>
-  <button class="category-btn" data-category="রাস মণ্ডপ">রাস মণ্ডপ</button>
-  <button class="category-btn" data-category="Railway Station">Railway Station</button>
-  <button class="category-btn" data-category="Bus Stand">Bus Stand</button>
-  <button class="category-btn" data-category="Parking">Parking</button>
-  <button class="category-btn" data-category="Hospital">Hospital</button>
-  <button class="category-btn" data-category="Public Toilet">Public Toilet</button>
+          <button class="category-btn active" data-category="all" type="button">সব জায়গা</button>
+          <button class="category-btn" data-category="রাস মণ্ডপ" type="button">রাস মণ্ডপ</button>
+          <button class="category-btn" data-category="Railway Station" type="button">Railway Station</button>
+          <button class="category-btn" data-category="Bus Stand" type="button">Bus Stand</button>
+          <button class="category-btn" data-category="Parking" type="button">Parking</button>
+          <button class="category-btn" data-category="Hospital" type="button">Hospital</button>
+          <button class="category-btn" data-category="Public Toilet" type="button">Public Toilet</button>
         </section>
+
         <div class="section-heading">
-          <div><p class="eyebrow">SAVED PLACES</p><h3>জনপ্রিয় লোকেশন</h3></div>
+          <div>
+            <p class="eyebrow">SAVED PLACES</p>
+            <h3>জনপ্রিয় লোকেশন</h3>
+          </div>
           <span id="placeCount" class="count-pill">0 লোকেশন</span>
         </div>
         <div id="placesList" class="places-grid"></div>
@@ -69,32 +73,65 @@
 
       <section id="adminPanel" class="admin-panel glass hidden">
         <div class="section-heading">
-          <div><p class="eyebrow">ADMIN TOOLS</p><h3>লোকেশন ম্যানেজ করুন</h3></div>
+          <div>
+            <p class="eyebrow">ADMIN TOOLS</p>
+            <h3>লোকেশন ম্যানেজ করুন</h3>
+          </div>
           <button id="logoutBtn" class="button button-outline" type="button">Logout</button>
         </div>
+
         <p class="muted small">Admin Mode চালু থাকলে ম্যাপে ক্লিক করে নতুন পিন যোগ করুন। পিন নির্বাচন করে তথ্য সম্পাদনা বা মুছতে পারবেন।</p>
+
         <form id="placeForm" class="place-form">
           <input id="placeId" type="hidden">
-          <label>লোকেশনের নাম<input id="placeName" required maxlength="90" placeholder="যেমন: নতুন লোকেশন"></label>
-          <label>বিবরণ<textarea id="placeNote" rows="2" maxlength="500" placeholder="লোকেশন সম্পর্কে সংক্ষিপ্ত তথ্য"></textarea></label>
+
+          <label>
+            লোকেশনের নাম
+            <input id="placeName" required maxlength="90" placeholder="যেমন: নতুন লোকেশন">
+          </label>
+
+          <label>
+            ক্যাটাগরি নির্বাচন করুন
+            <select id="placeCategory" required>
+              <option value="রাস মণ্ডপ">রাস মণ্ডপ</option>
+              <option value="Railway Station">Railway Station</option>
+              <option value="Bus Stand">Bus Stand</option>
+              <option value="Parking">Parking</option>
+              <option value="Hospital">Hospital</option>
+              <option value="Public Toilet">Public Toilet</option>
+            </select>
+          </label>
+
+          <label>
+            বিবরণ
+            <textarea id="placeNote" rows="2" maxlength="500" placeholder="লোকেশন সম্পর্কে সংক্ষিপ্ত তথ্য"></textarea>
+          </label>
+
           <div class="form-actions">
             <button class="button button-primary" type="submit">Save Location</button>
             <button id="newPlaceBtn" class="button button-outline" type="button">নতুন করে লিখুন</button>
             <button id="deletePlaceBtn" class="button button-danger" type="button" disabled>Delete</button>
           </div>
         </form>
+
         <p id="adminHint" class="hint">প্রথমে ম্যাপে ক্লিক করে নতুন পিনের জায়গা নির্বাচন করুন, অথবা তালিকা থেকে কোনো লোকেশন বেছে নিন।</p>
       </section>
     </main>
 
-    <footer><span>DAINHAT RASH GUIDE 2026</span><span>Map data © OpenStreetMap contributors</span></footer>
+    <footer>
+      <span>DAINHAT RASH GUIDE 2026</span>
+      <span>Map data © OpenStreetMap contributors</span>
+    </footer>
   </div>
 
   <dialog id="loginDialog" class="login-dialog glass">
     <form id="loginForm" method="dialog">
       <h3>Admin Login</h3>
       <p class="muted small">এই Starter সংস্করণে লোকাল ডেমো লগইন। প্রকাশের আগে সার্ভার-ভিত্তিক নিরাপদ লগইন আবশ্যক।</p>
-      <label>Admin password<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+      <label>
+        Admin password
+        <input id="adminPassword" type="password" autocomplete="current-password" required>
+      </label>
       <p id="loginError" class="error" aria-live="polite"></p>
       <div class="form-actions">
         <button class="button button-primary" value="login">Login</button>
@@ -105,13 +142,14 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js"></script>
+
   <script>
-if ("serviceWorker" in navigator) 
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js")
-      .catch(error => console.error("Service Worker Error:", error));
-  });
-}
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js")
+          .catch(error => console.error("Service Worker Error:", error));
+      });
+    }
   </script>
 </body>
 </html>
