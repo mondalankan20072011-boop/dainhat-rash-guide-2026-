@@ -1,6 +1,7 @@
 
 /* DAINHAT RASH GUIDE 2026
    Google Maps Direction Added
+   Category Filter Added
    Browser-local storage only.
 */
 (() => {
@@ -8,12 +9,22 @@
 
   const STORAGE_KEY = "dainhat-rash-guide-places-v1";
   const DEMO_ADMIN_PASSWORD = "ANKAN555666";
+  const DEFAULT_CATEGORY = "রাস মণ্ডপ";
+
+  const categories = [
+    "রাস মণ্ডপ",
+    "Railway Station",
+    "Bus Stand",
+    "Parking",
+    "Hospital",
+    "Public Toilet"
+  ];
 
   const initialPlaces = [
-    {id:"seed-1",name:"সাহাপাড়া নাগরিক মঞ্চ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false},
-    {id:"seed-2",name:"ছোটঠাকুরুন তলা",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false},
-    {id:"seed-3",name:"নটরাজ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false},
-    {id:"seed-4",name:"ব্যাংকের পাশে",note:"ব্যাংকের নির্দিষ্ট নাম ও সঠিক GPS পিন যাচাই করা বাকি।",lat:null,lng:null,verified:false}
+    {id:"seed-1",name:"সাহাপাড়া নাগরিক মঞ্চ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY},
+    {id:"seed-2",name:"ছোটঠাকুরুন তলা",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY},
+    {id:"seed-3",name:"নটরাজ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY},
+    {id:"seed-4",name:"ব্যাংকের পাশে",note:"ব্যাংকের নির্দিষ্ট নাম ও সঠিক GPS পিন যাচাই করা বাকি।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY}
   ];
 
   const $ = id => document.getElementById(id);
@@ -27,9 +38,16 @@
   function loadPlaces() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
+
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+
+        if (Array.isArray(parsed)) {
+          return parsed.map(p => ({
+            ...p,
+            category: p.category || DEFAULT_CATEGORY
+          }));
+        }
       }
     } catch (err) {
       console.warn("Could not read saved places", err);
@@ -103,6 +121,7 @@
 
       marker.bindPopup(`
         <strong>${esc(place.name)}</strong><br>
+        <small>${esc(place.category || DEFAULT_CATEGORY)}</small><br>
         ${esc(place.note || "বিবরণ নেই")}<br>
         <small>${place.verified ? "যাচাইকৃত স্থানাঙ্ক" : "স্থানাঙ্ক যাচাই বাকি"}</small>
         ${adminButtons}
@@ -118,19 +137,28 @@
     renderPlaces();
   }
 
-  // PLACES LIST + GOOGLE MAPS DIRECTION
+  // PLACES LIST + CATEGORY FILTER + GOOGLE MAPS DIRECTION
   function renderPlaces() {
     const query = $("searchInput").value
       .trim()
       .toLocaleLowerCase();
 
-    const filtered = places.filter(p =>
-      `${p.name} ${p.note || ""}`
-        .toLocaleLowerCase()
-        .includes(query)
-    );
+    const filtered = places.filter(p => {
+      const category = p.category || DEFAULT_CATEGORY;
 
-    $("placeCount").textContent = `${places.length} লোকেশন`;
+      const matchesCategory =
+        selectedCategory === "all" ||
+        category === selectedCategory;
+
+      const matchesSearch =
+        `${p.name} ${p.note || ""} ${category}`
+          .toLocaleLowerCase()
+          .includes(query);
+
+      return matchesCategory && matchesSearch;
+    });
+
+    $("placeCount").textContent = `${filtered.length} লোকেশন`;
 
     $("placesList").innerHTML = filtered.length
       ? filtered.map(p => {
@@ -149,6 +177,7 @@
 
               <div class="place-info">
                 <strong>${esc(p.name)}</strong>
+                <p>${esc(p.category || DEFAULT_CATEGORY)}</p>
                 <p>
                   ${
                     canNavigate
@@ -216,6 +245,19 @@
       });
   }
 
+  // CATEGORY BUTTONS
+  document.querySelectorAll(".category-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedCategory = btn.dataset.category || "all";
+
+      document.querySelectorAll(".category-btn").forEach(button => {
+        button.classList.toggle("active", button === btn);
+      });
+
+      renderPlaces();
+    });
+  });
+
   // SELECT PLACE
   function selectPlace(id) {
     const p = places.find(item => item.id === id);
@@ -224,6 +266,7 @@
     $("placeId").value = p.id;
     $("placeName").value = p.name;
     $("placeNote").value = p.note || "";
+    $("placeCategory").value = p.category || DEFAULT_CATEGORY;
     $("deletePlaceBtn").disabled = false;
 
     $("adminHint").textContent = hasPoint(p)
@@ -239,6 +282,7 @@
   function resetForm() {
     $("placeForm").reset();
     $("placeId").value = "";
+    $("placeCategory").value = DEFAULT_CATEGORY;
     $("deletePlaceBtn").disabled = true;
     pendingPoint = null;
 
@@ -249,6 +293,7 @@
   // ADMIN UI
   function updateAdminUI() {
     $("adminPanel").classList.toggle("hidden",!isAdmin);
+
     $("adminToggle").textContent = isAdmin
       ? "Admin Mode ON"
       : "Admin Login";
@@ -293,8 +338,13 @@
     const id = $("placeId").value;
     const name = $("placeName").value.trim();
     const note = $("placeNote").value.trim();
+    const category = $("placeCategory").value;
 
     if (!name) return;
+
+    if (!categories.includes(category)) {
+      return alert("সঠিক ক্যাটাগরি নির্বাচন করুন।");
+    }
 
     if (id) {
       const p = places.find(item => item.id === id);
@@ -302,6 +352,7 @@
 
       p.name = name;
       p.note = note;
+      p.category = category;
 
       if (pendingPoint) {
         p.lat = pendingPoint.lat;
@@ -319,6 +370,7 @@
           : `place-${Date.now()}`,
         name,
         note,
+        category,
         lat:pendingPoint.lat,
         lng:pendingPoint.lng,
         verified:true
@@ -455,4 +507,4 @@
   setTimeout(() => map.invalidateSize(),250);
 
 })();
-     
+                 
