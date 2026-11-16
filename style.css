@@ -491,3 +491,32 @@ footer{
     gap:4px
   }
 }
+/* FIX CATEGORY BUTTON DESIGN */
+
+.category-section {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 9px !important;
+  padding: 12px !important;
+  margin-bottom: 22px !important;
+  border: 1px solid #245b49 !important;
+  border-radius: 17px !important;
+  background: #0b3d2e !important;
+}
+
+.category-section .category-btn {
+  background: #123f32 !important;
+  color: #a7f3d0 !important;
+  border: 1px solid #245b49 !important;
+  border-radius: 12px !important;
+  padding: 10px 15px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+}
+
+.category-section .category-btn.active {
+  background: linear-gradient(135deg, #34d399, #059669) !important;
+  color: #03251b !important;
+  border-color: #34d399 !important;
+}
