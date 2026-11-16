@@ -22,6 +22,7 @@
   let isAdmin = false;
   let pendingPoint = null;
   let markers = new Map();
+  let selectedCategory = "all";
 
   function loadPlaces() {
     try {
