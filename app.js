@@ -5,7 +5,7 @@
   "use strict";
 
   const FIREBASE_CONFIG = {
-    apiKey: "PASTE_YOUR_FIREBASE_WEB_API_KEY",
+    apiKey: "AIzaSyAKXzJopkZNG_0L2jrkb5vmXgrPEqMhERg",
     authDomain: "dainhat-rash-guide.firebaseapp.com",
     projectId: "dainhat-rash-guide",
     storageBucket: "dainhat-rash-guide.firebasestorage.app",
