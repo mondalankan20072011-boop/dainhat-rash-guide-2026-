@@ -1,15 +1,41 @@
-
 /* DAINHAT RASH GUIDE 2026
-   Google Maps Direction Added
-   Category Filter Added
-   Browser-local storage only.
+   Firebase Firestore + Admin Authentication
 */
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "dainhat-rash-guide-places-v1";
-  const DEMO_ADMIN_PASSWORD = "ANKAN555666";
-  const DEFAULT_CATEGORY = "রাস মণ্ডপ";
+  const FIREBASE_CONFIG = {
+    apiKey: "PASTE_YOUR_FIREBASE_WEB_API_KEY",
+    authDomain: "dainhat-rash-guide.firebaseapp.com",
+    projectId: "dainhat-rash-guide",
+    storageBucket: "dainhat-rash-guide.firebasestorage.app",
+    messagingSenderId: "129291355113",
+    appId: "1:129291355113:web:b35be037c2a5814d494178",
+    measurementId: "G-E8RTZNCFPT"
+  };
+
+  const ADMIN_UID = "2FaORIg7uBcX3bd1AhLAvth8fEP2";
+  const COLLECTION = "places";
+  const FIREBASE_VERSION = "10.14.1";
+
+  const $ = (id) => document.getElementById(id);
+
+  const requiredIds = [
+    "map", "searchInput", "placeCount", "placesList",
+    "adminPanel", "adminToggle", "mapMode", "adminHint",
+    "placeForm", "placeId", "placeName", "placeNote",
+    "placeCategory", "deletePlaceBtn", "newPlaceBtn",
+    "loginDialog", "loginForm", "adminPassword",
+    "loginError", "cancelLogin", "logoutBtn", "locateBtn"
+  ];
+
+  const missing = requiredIds.filter((id) => !$(id));
+
+  if (missing.length) {
+    console.error("Missing HTML elements:", missing);
+    alert("HTML-এ প্রয়োজনীয় ID পাওয়া যায়নি: " + missing.join(", "));
+    return;
+  }
 
   const categories = [
     "রাস মণ্ডপ",
@@ -21,490 +47,721 @@
   ];
 
   const initialPlaces = [
-    {id:"seed-1",name:"সাহাপাড়া নাগরিক মঞ্চ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY},
-    {id:"seed-2",name:"ছোটঠাকুরুন তলা",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY},
-    {id:"seed-3",name:"নটরাজ",note:"সঠিক GPS পিন Admin-কে ম্যাপে বসাতে হবে।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY},
-    {id:"seed-4",name:"ব্যাংকের পাশে",note:"ব্যাংকের নির্দিষ্ট নাম ও সঠিক GPS পিন যাচাই করা বাকি।",lat:null,lng:null,verified:false,category:DEFAULT_CATEGORY}
+    {
+      id: "seed-1",
+      name: "সাহাপাড়া নাগরিক মঞ্চ",
+      note: "",
+      category: "রাস মণ্ডপ",
+      lat: null,
+      lng: null
+    },
+    {
+      id: "seed-2",
+      name: "ছোটঠাকুরুন তলা",
+      note: "",
+      category: "রাস মণ্ডপ",
+      lat: null,
+      lng: null
+    },
+    {
+      id: "seed-3",
+      name: "নটরাজ",
+      note: "",
+      category: "রাস মণ্ডপ",
+      lat: null,
+      lng: null
+    },
+    {
+      id: "seed-4",
+      name: "ব্যাংকের পাশে",
+      note: "",
+      category: "রাস মণ্ডপ",
+      lat: null,
+      lng: null
+    }
   ];
 
-  const $ = id => document.getElementById(id);
-
-  let places = loadPlaces();
+  let places = [...initialPlaces];
+  let selectedId = null;
   let isAdmin = false;
-  let pendingPoint = null;
-  let markers = new Map();
-  let selectedCategory = "all";
+  let map;
+  let markerLayer;
+  let firebase = null;
+  let unsubscribePlaces = null;
+  let currentFilter = "সব";
 
-  function loadPlaces() {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+  const escapeHTML = (value) =>
+    String(value ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[c]));
 
-      if (saved) {
-        const parsed = JSON.parse(saved);
+  function setStatus(message) {
+    $("adminHint").textContent = message;
+  }
 
-        if (Array.isArray(parsed)) {
-          return parsed.map(p => ({
-            ...p,
-            category: p.category || DEFAULT_CATEGORY
-          }));
-        }
+  function makeId() {
+    return (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : "place-" + Date.now();
+  }
+
+  function ensureEmailField() {
+    if ($("adminEmail")) return;
+
+    const password = $("adminPassword");
+
+    const wrapper = document.createElement("label");
+    wrapper.id = "adminEmailWrap";
+    wrapper.style.display = "block";
+    wrapper.style.marginBottom = "10px";
+
+    wrapper.innerHTML = `
+      <span style="display:block;margin-bottom:5px">
+        Admin Email
+      </span>
+      <input
+        id="adminEmail"
+        type="email"
+        autocomplete="username"
+        required
+        style="width:100%;box-sizing:border-box"
+      >
+    `;
+
+    password.parentNode.insertBefore(wrapper, password);
+  }
+
+  async function loadFirebase() {
+    if (
+      FIREBASE_CONFIG.apiKey ===
+      "PASTE_YOUR_FIREBASE_WEB_API_KEY"
+    ) {
+      throw new Error("Firebase Web API Key বসানো হয়নি।");
+    }
+
+    const base =
+      `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
+
+    const [appSdk, authSdk, dbSdk] = await Promise.all([
+      import(`${base}/firebase-app.js`),
+      import(`${base}/firebase-auth.js`),
+      import(`${base}/firebase-firestore.js`)
+    ]);
+
+    const app = appSdk.initializeApp(FIREBASE_CONFIG);
+    const auth = authSdk.getAuth(app);
+    const db = dbSdk.getFirestore(app);
+
+    firebase = {
+      authSdk,
+      dbSdk,
+      auth,
+      db
+    };
+  }
+
+  function initMap() {
+    map = L.map("map").setView([23.65, 88.13], 15);
+
+    L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 20,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       }
-    } catch (err) {
-      console.warn("Could not read saved places", err);
-    }
+    ).addTo(map);
 
-    return initialPlaces.map(p => ({...p}));
-  }
+    markerLayer = L.layerGroup().addTo(map);
 
-  function savePlaces() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(places));
-      return true;
-    } catch (err) {
-      alert("এই ব্রাউজারে লোকেশন সেভ করা যায়নি। Storage permission বা জায়গা পরীক্ষা করুন।");
-      console.error(err);
-      return false;
-    }
-  }
+    map.on("click", (event) => {
+      if (!isAdmin || !selectedId) return;
 
-  const esc = value =>
-    String(value ?? "").replace(/[&<>"']/g, ch => ({
-      "&":"&amp;",
-      "<":"&lt;",
-      ">":"&gt;",
-      '"':"&quot;",
-      "'":"&#39;"
-    }[ch]));
+      const place = places.find(
+        (p) => p.id === selectedId
+      );
 
-  const hasPoint = p =>
-    Number.isFinite(Number(p.lat)) &&
-    Number.isFinite(Number(p.lng)) &&
-    p.lat !== null &&
-    p.lng !== null;
+      if (!place) return;
 
-  // MAP
-  const map = L.map("map", {zoomControl:true})
-    .setView([23.0, 88.0], 8);
+      place.lat = Number(event.latlng.lat.toFixed(6));
+      place.lng = Number(event.latlng.lng.toFixed(6));
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom:19,
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
-  }).addTo(map);
+      fillForm(place);
 
-  function markerIcon() {
-    return L.divIcon({
-      className:"custom-pin",
-      html:'<span style="display:block;width:16px;height:16px;border:3px solid #d1fae5;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#10b981;box-shadow:0 2px 12px #0008"></span>',
-      iconSize:[18,18],
-      iconAnchor:[9,18]
+      setStatus(
+        "ম্যাপে পিন বসানো হয়েছে। পরিবর্তন রাখতে Save চাপুন।"
+      );
     });
   }
+     function googleMapsUrl(place) {
+    if (
+      Number.isFinite(place.lat) &&
+      Number.isFinite(place.lng)
+    ) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`;
+    }
 
-  // DRAW MAP MARKERS
-  function drawMarkers() {
-    markers.forEach(marker => map.removeLayer(marker));
-    markers.clear();
-
-    places.filter(hasPoint).forEach(place => {
-      const marker = L.marker(
-        [Number(place.lat),Number(place.lng)],
-        {icon:markerIcon()}
-      ).addTo(map);
-
-      const adminButtons = isAdmin
-        ? `<div class="popup-actions">
-             <button type="button"
-             onclick="window.DainhatApp.edit('${esc(place.id)}')">
-             Edit</button>
-           </div>`
-        : "";
-
-      marker.bindPopup(`
-        <strong>${esc(place.name)}</strong><br>
-        <small>${esc(place.category || DEFAULT_CATEGORY)}</small><br>
-        ${esc(place.note || "বিবরণ নেই")}<br>
-        <small>${place.verified ? "যাচাইকৃত স্থানাঙ্ক" : "স্থানাঙ্ক যাচাই বাকি"}</small>
-        ${adminButtons}
-      `);
-
-      marker.on("click", () => {
-        if (isAdmin) selectPlace(place.id);
-      });
-
-      markers.set(place.id, marker);
-    });
-
-    renderPlaces();
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      place.name + ", Dainhat, West Bengal"
+    )}`;
   }
 
-  // PLACES LIST + CATEGORY FILTER + GOOGLE MAPS DIRECTION
   function renderPlaces() {
+    markerLayer.clearLayers();
+
     const query = $("searchInput").value
       .trim()
-      .toLocaleLowerCase();
+      .toLowerCase();
 
-    const filtered = places.filter(p => {
-      const category = p.category || DEFAULT_CATEGORY;
-
-      const matchesCategory =
-        selectedCategory === "all" ||
-        category === selectedCategory;
-
-      const matchesSearch =
-        `${p.name} ${p.note || ""} ${category}`
-          .toLocaleLowerCase()
+    const visible = places.filter((p) => {
+      const matchesQuery =
+        !query ||
+        `${p.name} ${p.note} ${p.category}`
+          .toLowerCase()
           .includes(query);
 
-      return matchesCategory && matchesSearch;
+      const matchesCategory =
+        currentFilter === "সব" ||
+        p.category === currentFilter;
+
+      return matchesQuery && matchesCategory;
     });
 
-    $("placeCount").textContent = `${filtered.length} লোকেশন`;
+    visible.forEach((place) => {
+      if (
+        Number.isFinite(place.lat) &&
+        Number.isFinite(place.lng)
+      ) {
+        const marker = L.marker([
+          place.lat,
+          place.lng
+        ]).addTo(markerLayer);
 
-    $("placesList").innerHTML = filtered.length
-      ? filtered.map(p => {
-          const canNavigate = hasPoint(p);
+        marker.bindPopup(`
+          <strong>${escapeHTML(place.name)}</strong><br>
+          ${escapeHTML(place.note)}<br>
+          <a href="${googleMapsUrl(place)}"
+             target="_blank"
+             rel="noopener">
+             Google Maps Direction
+          </a>
+        `);
 
-          const destination = canNavigate
-            ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                `${Number(p.lat)},${Number(p.lng)}`
-              )}&travelmode=walking`
-            : "";
+        marker.on("click", () => {
+          selectedId = place.id;
+        });
+      }
+    });
 
-          return `
-            <article class="place-card">
+    $("placeCount").textContent =
+      `${visible.length}টি স্থান`;
 
-              <div class="place-icon">⌖</div>
+    $("placesList").innerHTML = visible.map((p) => `
+      <article class="place-item"
+        data-place-id="${escapeHTML(p.id)}">
 
-              <div class="place-info">
-                <strong>${esc(p.name)}</strong>
-                <p>${esc(p.category || DEFAULT_CATEGORY)}</p>
-                <p>
-                  ${
-                    canNavigate
-                      ? (p.verified ? "GPS পিন যাচাইকৃত" : "GPS পিন যাচাই বাকি")
-                      : "ম্যাপে পিন বসানো হয়নি"
-                  }
-                </p>
-              </div>
+        <div>
+          <strong>${escapeHTML(p.name)}</strong>
 
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <small>
+            ${escapeHTML(p.category || "অন্যান্য")}
+          </small>
 
-                <button
-                  class="button button-outline"
-                  type="button"
-                  data-show="${esc(p.id)}">
-                  Map-এ দেখুন
-                </button>
+          ${p.note
+            ? `<p>${escapeHTML(p.note)}</p>`
+            : ""}
 
-                ${
-                  canNavigate
-                    ? `<a
-                        class="button button-outline"
-                        href="${destination}"
-                        target="_blank"
-                        rel="noopener noreferrer">
-                        Get Direction
-                      </a>`
-                    : `<button
-                        class="button button-outline"
-                        type="button"
-                        disabled>
-                        Get Direction
-                      </button>`
-                }
+          <small>
+            ${
+              Number.isFinite(p.lat) &&
+              Number.isFinite(p.lng)
+                ? "ম্যাপে পিন দেওয়া আছে"
+                : "পিনের অবস্থান যোগ হয়নি"
+            }
+          </small>
+        </div>
 
-              </div>
+        <div class="place-actions">
+          <a href="${googleMapsUrl(p)}"
+             target="_blank"
+             rel="noopener">
+             Direction
+          </a>
 
-            </article>
-          `;
-        }).join("")
-      : '<p class="muted small">কোনো লোকেশন পাওয়া যায়নি।</p>';
+          ${
+            isAdmin
+              ? `<button type="button"
+                   data-edit-id="${escapeHTML(p.id)}">
+                   Edit
+                 </button>`
+              : ""
+          }
+        </div>
+      </article>
+    `).join("") || "<p>কোনও স্থান পাওয়া যায়নি।</p>";
 
     $("placesList")
-      .querySelectorAll("[data-show]")
-      .forEach(btn => {
-        btn.addEventListener("click", () => {
-          const p = places.find(
-            item => item.id === btn.dataset.show
+      .querySelectorAll("[data-edit-id]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const place = places.find(
+            (p) => p.id === button.dataset.editId
           );
 
-          if (!p) return;
-
-          if (hasPoint(p)) {
-            map.setView(
-              [Number(p.lat),Number(p.lng)],
-              17
-            );
-            markers.get(p.id)?.openPopup();
-          } else if (isAdmin) {
-            selectPlace(p.id);
-          } else {
-            alert("এই লোকেশনের সঠিক GPS পিন এখনো Admin যোগ করেননি।");
-          }
+          if (place) selectPlace(place);
         });
       });
   }
 
-  // CATEGORY BUTTONS
-  document.querySelectorAll(".category-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      selectedCategory = btn.dataset.category || "all";
-
-      document.querySelectorAll(".category-btn").forEach(button => {
-        button.classList.toggle("active", button === btn);
-      });
-
-      renderPlaces();
-    });
-  });
-
-  // SELECT PLACE
-  function selectPlace(id) {
-    const p = places.find(item => item.id === id);
-    if (!p || !isAdmin) return;
-
-    $("placeId").value = p.id;
-    $("placeName").value = p.name;
-    $("placeNote").value = p.note || "";
-    $("placeCategory").value = p.category || DEFAULT_CATEGORY;
-    $("deletePlaceBtn").disabled = false;
-
-    $("adminHint").textContent = hasPoint(p)
-      ? `নির্বাচিত পিন: ${p.lat}, ${p.lng}`
-      : "এই লোকেশনের GPS পিন নেই। ম্যাপে ক্লিক করে পিন বসান।";
-
-    pendingPoint = hasPoint(p)
-      ? {lat:Number(p.lat),lng:Number(p.lng)}
-      : null;
+  function fillForm(place) {
+    $("placeId").value = place?.id || "";
+    $("placeName").value = place?.name || "";
+    $("placeNote").value = place?.note || "";
+    $("placeCategory").value =
+      place?.category || categories[0];
   }
 
-  // RESET FORM
-  function resetForm() {
-    $("placeForm").reset();
-    $("placeId").value = "";
-    $("placeCategory").value = DEFAULT_CATEGORY;
-    $("deletePlaceBtn").disabled = true;
-    pendingPoint = null;
+  function selectPlace(place) {
+    selectedId = place.id;
+    fillForm(place);
 
-    $("adminHint").textContent =
-      "ম্যাপে ক্লিক করে নতুন পিনের জায়গা নির্বাচন করুন, অথবা তালিকা থেকে কোনো লোকেশন বেছে নিন।";
-  }
-
-  // ADMIN UI
-  function updateAdminUI() {
-    $("adminPanel").classList.toggle("hidden",!isAdmin);
-
-    $("adminToggle").textContent = isAdmin
-      ? "Admin Mode ON"
-      : "Admin Login";
-
-    $("mapMode").textContent = isAdmin
-      ? "ADMIN EDIT MODE"
-      : "VIEW MODE";
-
-    $("adminHint").textContent = isAdmin
-      ? "ম্যাপে ক্লিক করলে নতুন লোকেশনের স্থানাঙ্ক ফর্মে আসবে।"
-      : "";
-
-    drawMarkers();
-  }
-
-  // MAP CLICK TO ADD PIN
-  map.on("click", event => {
-    if (!isAdmin) return;
-
-    pendingPoint = {
-      lat:Number(event.latlng.lat.toFixed(6)),
-      lng:Number(event.latlng.lng.toFixed(6))
-    };
-
-    if (!$("placeId").value) {
-      $("placeId").value = "";
-      $("placeName").focus();
+    if (
+      Number.isFinite(place.lat) &&
+      Number.isFinite(place.lng)
+    ) {
+      map.setView(
+        [place.lat, place.lng],
+        18
+      );
     }
 
-    $("adminHint").textContent =
-      `নির্বাচিত পিন: ${pendingPoint.lat}, ${pendingPoint.lng} — নাম লিখে Save Location চাপুন।`;
-  });
+    if (isAdmin) {
+      setStatus(
+        "স্থানটি সম্পাদনা করতে তথ্য বদলে Save চাপুন।"
+      );
+    }
+  }
 
-  // SAVE LOCATION
-  $("placeForm").addEventListener("submit", event => {
+  async function savePlace(event) {
     event.preventDefault();
 
-    if (!isAdmin) {
-      return alert("শুধুমাত্র Admin লোকেশন পরিবর্তন করতে পারবেন।");
-    }
+    if (!isAdmin || !firebase) return;
 
-    const id = $("placeId").value;
-    const name = $("placeName").value.trim();
-    const note = $("placeNote").value.trim();
-    const category = $("placeCategory").value;
+    const id = $("placeId").value || makeId();
 
-    if (!name) return;
+    const old = places.find(
+      (p) => p.id === id
+    );
 
-    if (!categories.includes(category)) {
-      return alert("সঠিক ক্যাটাগরি নির্বাচন করুন।");
-    }
+    const place = {
+      id,
+      name: $("placeName").value.trim(),
+      note: $("placeNote").value.trim(),
+      category:
+        $("placeCategory").value || categories[0],
+      lat: old?.lat ?? null,
+      lng: old?.lng ?? null,
+      updatedAt: new Date().toISOString()
+    };
 
-    if (id) {
-      const p = places.find(item => item.id === id);
-      if (!p) return;
-
-      p.name = name;
-      p.note = note;
-      p.category = category;
-
-      if (pendingPoint) {
-        p.lat = pendingPoint.lat;
-        p.lng = pendingPoint.lng;
-        p.verified = true;
-      }
-    } else {
-      if (!pendingPoint) {
-        return alert("প্রথমে ম্যাপে ক্লিক করে নতুন পিনের জায়গা নির্বাচন করুন।");
-      }
-
-      places.push({
-        id:crypto.randomUUID
-          ? crypto.randomUUID()
-          : `place-${Date.now()}`,
-        name,
-        note,
-        category,
-        lat:pendingPoint.lat,
-        lng:pendingPoint.lng,
-        verified:true
-      });
-    }
-
-    if (savePlaces()) {
-      drawMarkers();
-      resetForm();
-    }
-  });
-
-  // NEW PLACE
-  $("newPlaceBtn").addEventListener("click",resetForm);
-
-  // DELETE PLACE
-  $("deletePlaceBtn").addEventListener("click",() => {
-    if (!isAdmin) return;
-
-    const id = $("placeId").value;
-    const p = places.find(item => item.id === id);
-
-    if (!p || !confirm(`“${p.name}” মুছে ফেলবেন?`)) return;
-
-    places = places.filter(item => item.id !== id);
-
-    if (savePlaces()) {
-      drawMarkers();
-      resetForm();
-    }
-  });
-
-  // ADMIN LOGIN
-  $("adminToggle").addEventListener("click",() => {
-    if (isAdmin) {
-      isAdmin = false;
-      updateAdminUI();
+    if (!place.name) {
+      alert("স্থানের নাম লিখুন।");
       return;
     }
 
-    $("loginError").textContent = "";
-    $("loginDialog").showModal();
-    $("adminPassword").focus();
-  });
+    try {
+      await firebase.dbSdk.setDoc(
+        firebase.dbSdk.doc(
+          firebase.db,
+          COLLECTION,
+          id
+        ),
+        place
+      );
 
-  $("loginForm").addEventListener("submit",event => {
+      selectedId = id;
+      setStatus("স্থানটি সংরক্ষণ হয়েছে।");
+
+    } catch (error) {
+      console.error(error);
+      alert(
+        "সংরক্ষণ করা যায়নি: " + error.message
+      );
+    }
+  }
+
+  async function deletePlace() {
+    if (!isAdmin || !firebase) return;
+
+    const id = $("placeId").value;
+
+    if (!id) return;
+
+    const place = places.find(
+      (p) => p.id === id
+    );
+
+    if (
+      !place ||
+      !confirm(`“${place.name}” মুছে ফেলবেন?`)
+    ) {
+      return;
+    }
+
+    try {
+      await firebase.dbSdk.deleteDoc(
+        firebase.dbSdk.doc(
+          firebase.db,
+          COLLECTION,
+          id
+        )
+      );
+
+      selectedId = null;
+      fillForm(null);
+
+      setStatus("স্থানটি মুছে ফেলা হয়েছে।");
+
+    } catch (error) {
+      console.error(error);
+      alert(
+        "মুছতে সমস্যা হয়েছে: " + error.message
+      );
+    }
+  }
+     async function seedInitialPlacesIfEmpty() {
+    const {
+      collection,
+      getDocs,
+      writeBatch,
+      doc
+    } = firebase.dbSdk;
+
+    const ref = collection(
+      firebase.db,
+      COLLECTION
+    );
+
+    const snapshot = await getDocs(ref);
+
+    if (!snapshot.empty) return;
+
+    const batch = writeBatch(firebase.db);
+
+    initialPlaces.forEach((place) => {
+      batch.set(
+        doc(firebase.db, COLLECTION, place.id),
+        place
+      );
+    });
+
+    await batch.commit();
+  }
+
+  function listenToPlaces() {
+    const ref = firebase.dbSdk.collection(
+      firebase.db,
+      COLLECTION
+    );
+
+    unsubscribePlaces =
+      firebase.dbSdk.onSnapshot(
+        ref,
+        (snapshot) => {
+          places = snapshot.docs.map((d) => ({
+            id: d.id,
+            ...d.data()
+          }));
+
+          if (!places.length) {
+            places = [...initialPlaces];
+          }
+
+          renderPlaces();
+        },
+        (error) => {
+          console.error(error);
+
+          setStatus(
+            "Firebase থেকে তথ্য পাওয়া যাচ্ছে না: " +
+            error.message
+          );
+        }
+      );
+  }
+
+  async function login(event) {
     event.preventDefault();
 
-    if ($("adminPassword").value === DEMO_ADMIN_PASSWORD) {
-      isAdmin = true;
-      $("loginDialog").close();
-      $("adminPassword").value = "";
-      updateAdminUI();
-    } else {
-      $("loginError").textContent =
-        "পাসওয়ার্ড মেলেনি। নিজের সেট করা পাসওয়ার্ড পরীক্ষা করুন।";
-    }
-  });
+    if (!firebase) return;
 
-  $("cancelLogin").addEventListener(
-    "click",
-    () => $("loginDialog").close()
-  );
+    $("loginError").textContent = "";
 
-  $("logoutBtn").addEventListener("click",() => {
-    isAdmin = false;
-    resetForm();
-    updateAdminUI();
-  });
-
-  // SEARCH
-  $("searchInput").addEventListener("input",renderPlaces);
-
-  // MY LOCATION
-  $("locateBtn").addEventListener("click",() => {
-    if (!navigator.geolocation) {
-      return alert("এই ব্রাউজারে GPS সমর্থিত নয়।");
-    }
-
-    $("locateBtn").disabled = true;
-    $("locateBtn").textContent = "অবস্থান খোঁজা হচ্ছে…";
-
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const point = [
-          pos.coords.latitude,
-          pos.coords.longitude
-        ];
-
-        map.setView(point,17);
-
-        L.circleMarker(point,{
-          radius:8,
-          color:"#d1fae5",
-          weight:3,
-          fillColor:"#10b981",
-          fillOpacity:.9
-        })
-        .addTo(map)
-        .bindPopup("আপনার বর্তমান অবস্থান")
-        .openPopup();
-
-        $("locateBtn").disabled = false;
-        $("locateBtn").textContent = "◎ আমার অবস্থান";
-      },
-
-      err => {
-        alert(
-          err.code === 1
-            ? "GPS permission দেওয়া হয়নি। Browser settings থেকে Location permission চালু করুন।"
-            : "বর্তমান অবস্থান পাওয়া যায়নি। GPS চালু আছে কি না দেখুন।"
+    try {
+      const credential =
+        await firebase.authSdk.signInWithEmailAndPassword(
+          firebase.auth,
+          $("adminEmail").value.trim(),
+          $("adminPassword").value
         );
 
-        $("locateBtn").disabled = false;
-        $("locateBtn").textContent = "◎ আমার অবস্থান";
-      },
+      if (credential.user.uid !== ADMIN_UID) {
+        await firebase.authSdk.signOut(
+          firebase.auth
+        );
 
-      {
-        enableHighAccuracy:true,
-        timeout:12000,
-        maximumAge:10000
+        $("loginError").textContent =
+          "এই অ্যাকাউন্টটি Admin নয়।";
+      }
+
+    } catch (error) {
+      $("loginError").textContent =
+        "Login হয়নি। Email/Password পরীক্ষা করুন।";
+
+      console.error(error);
+    }
+  }
+
+  function setAdminMode(user) {
+    isAdmin =
+      !!user && user.uid === ADMIN_UID;
+
+    $("adminPanel").hidden = !isAdmin;
+    $("logoutBtn").hidden = !isAdmin;
+    $("adminToggle").hidden = isAdmin;
+
+    $("adminHint").textContent = isAdmin
+      ? "Admin Mode চালু। ম্যাপে ক্লিক করে পিন বসিয়ে Save করুন।"
+      : "সাধারণ দর্শক মোড";
+
+    renderPlaces();
+
+    if (
+      isAdmin &&
+      $("loginDialog").close
+    ) {
+      $("loginDialog").close();
+    }
+  }
+
+  function setupCategoryFilter() {
+    const host = $("mapMode");
+
+    const select = document.createElement("select");
+
+    select.id = "categoryFilter";
+    select.setAttribute(
+      "aria-label",
+      "Category filter"
+    );
+
+    select.style.margin = "6px";
+
+    select.innerHTML = [
+      "সব",
+      ...categories
+    ].map((c) => `
+      <option value="${escapeHTML(c)}">
+        ${escapeHTML(c)}
+      </option>
+    `).join("");
+
+    host.insertAdjacentElement(
+      "afterend",
+      select
+    );
+
+    select.addEventListener("change", () => {
+      currentFilter = select.value;
+      renderPlaces();
+    });
+  }
+
+  function setupEvents() {
+    ensureEmailField();
+    setupCategoryFilter();
+
+    $("searchInput").addEventListener(
+      "input",
+      renderPlaces
+    );
+
+    $("placeForm").addEventListener(
+      "submit",
+      savePlace
+    );
+
+    $("deletePlaceBtn").addEventListener(
+      "click",
+      deletePlace
+    );
+
+    $("newPlaceBtn").addEventListener(
+      "click",
+      () => {
+        selectedId = null;
+        fillForm(null);
+        setStatus("নতুন স্থানের নাম লিখুন।");
       }
     );
-  });
 
-  // GLOBAL ADMIN EDIT
+    $("adminToggle").addEventListener(
+      "click",
+      () => {
+        if ($("loginDialog").showModal) {
+          $("loginDialog").showModal();
+        } else {
+          $("loginDialog").hidden = false;
+        }
+      }
+    );
+
+    $("loginForm").addEventListener(
+      "submit",
+      login
+    );
+
+    $("cancelLogin").addEventListener(
+      "click",
+      () => {
+        if ($("loginDialog").close) {
+          $("loginDialog").close();
+        } else {
+          $("loginDialog").hidden = true;
+        }
+      }
+    );
+
+    $("logoutBtn").addEventListener(
+      "click",
+      () => firebase?.authSdk.signOut(
+        firebase.auth
+      )
+    );
+
+    $("locateBtn").addEventListener(
+      "click",
+      () => {
+        if (!navigator.geolocation) {
+          alert("এই ব্রাউজারে Location সুবিধা নেই।");
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const latlng = [
+              position.coords.latitude,
+              position.coords.longitude
+            ];
+
+            map.setView(latlng, 17);
+
+            L.circleMarker(latlng, {
+              radius: 8
+            })
+              .addTo(map)
+              .bindPopup("আপনার বর্তমান অবস্থান")
+              .openPopup();
+          },
+          (error) => {
+            alert(
+              "Location পাওয়া যায়নি: " +
+              error.message
+            );
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 12000
+          }
+        );
+      }
+    );
+  }
+
+  async function start() {
+    if (typeof L === "undefined") {
+      alert(
+        "Leaflet map library লোড হয়নি।"
+      );
+      return;
+    }
+
+    initMap();
+    setupEvents();
+    renderPlaces();
+
+    try {
+      await loadFirebase();
+
+      listenToPlaces();
+
+      firebase.authSdk.onAuthStateChanged(
+        firebase.auth,
+        async (user) => {
+          setAdminMode(
+            user && user.uid === ADMIN_UID
+              ? user
+              : null
+          );
+
+          if (
+            user &&
+            user.uid === ADMIN_UID
+          ) {
+            try {
+              await seedInitialPlacesIfEmpty();
+            } catch (error) {
+              console.error(error);
+
+              setStatus(
+                "প্রাথমিক স্থান যোগ করা যায়নি: " +
+                error.message
+              );
+            }
+          }
+        }
+      );
+
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        "Firebase চালু হয়নি: " +
+        error.message
+      );
+
+      alert(
+        "Firebase সেটআপে সমস্যা: " +
+        error.message
+      );
+    }
+  }
+
   window.DainhatApp = {
-    edit:selectPlace
+    edit: (id) => {
+      const place = places.find(
+        (p) => p.id === id
+      );
+
+      if (place) selectPlace(place);
+    }
   };
 
-  drawMarkers();
-  updateAdminUI();
-
-  setTimeout(() => map.invalidateSize(),250);
+  if (
+    document.readyState === "loading"
+  ) {
+    document.addEventListener(
+      "DOMContentLoaded",
+      start,
+      { once: true }
+    );
+  } else {
+    start();
+  }
 
 })();
-                 
+   
