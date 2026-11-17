@@ -461,39 +461,30 @@
 
     await batch.commit();
   }
-
-  function listenToPlaces() {
-    const ref = firebase.dbSdk.collection(
-      firebase.db,
-      COLLECTION
-    );
-
-    unsubscribePlaces =
-      firebase.dbSdk.onSnapshot(
-        ref,
-        (snapshot) => {
-          places = snapshot.docs.map((d) => ({
-            id: d.id,
-            ...d.data()
-          }));
-
-          if (!places.length) {
-            places = [...initialPlaces];
-          }
-
-          renderPlaces();
-        },
-        (error) => {
-          console.error(error);
-
-          setStatus(
-            "Firebase থেকে তথ্য পাওয়া যাচ্ছে না: " +
-            error.message
-          );
-        }
-      );
-  }
-
+function listenToPlaces() {
+  const ref = firebase.dbSdk.collection(
+    firebase.db,
+    COLLECTION
+  );
+  unsubscribePlaces = firebase.dbSdk.onSnapshot(
+    ref,
+    (snapshot) => {
+      places = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
+      if (!places.length) {
+        places = [...initialPlaces];
+      }
+      renderPlaces();
+    },
+    (error) => {
+      console.error(error);
+      setStatus("Firebase Error: " + error.message);
+    }
+  );
+}
+     
   async function login(event) {
     event.preventDefault();
 
