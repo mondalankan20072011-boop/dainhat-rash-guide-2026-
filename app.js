@@ -165,7 +165,7 @@
   }
 
   function initMap() {
-    map = L.map("map").setView([23.65, 88.13], 15);
+    map = L.map("map").setView([23.6063, 88.1715], 15);
 
     L.tileLayer(
       "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
