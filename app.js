@@ -100,6 +100,21 @@
   }
 
     function initializeMap() {
+    
+async function initializeFirebase() {
+  const [app, firestore, authentication] = await Promise.all([
+    import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-app.js`),
+    import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-firestore.js`),
+    import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-auth.js`)
+  ]);
+
+  const firebaseApp = app.initializeApp(FIREBASE_CONFIG);
+  db = firestore.getFirestore(firebaseApp);
+  auth = authentication.getAuth(firebaseApp);
+  sdk = { ...firestore, ...authentication };
+}
+
+function initializeMap() {
   if (typeof L === "undefined" || !$("map")) {
     throw new Error("Leaflet পাওয়া যায়নি।");
   }
@@ -138,12 +153,18 @@
   satellite.addTo(map);
 
   let tileErrors = 0;
+  let fallbackActivated = false;
 
   satellite.on("tileerror", function () {
     tileErrors++;
 
-    if (tileErrors >= 3 && map.hasLayer(satellite)) {
-      map.removeLayer(satellite);
+    if (tileErrors >= 3 && !fallbackActivated) {
+      fallbackActivated = true;
+
+      if (map.hasLayer(satellite)) {
+        map.removeLayer(satellite);
+      }
+
       streetMap.addTo(map);
       status("Satellite পাওয়া যাচ্ছে না। Street Map চালু হয়েছে।");
     }
@@ -155,7 +176,6 @@
   }).addTo(map);
 
   map.fitBounds(DAINHAT_BOUNDS);
-
   markerLayer = L.layerGroup().addTo(map);
 
   map.on("click", function (event) {
@@ -171,107 +191,8 @@
   });
 
   map.attributionControl.setPrefix(false);
-    }
-  }
-
-  map = L.map("map", {
-    center: DAINHAT_CENTER,
-    zoom: 15,
-    minZoom: 13,
-    maxZoom: 19,
-    maxBounds: DAINHAT_BOUNDS,
-    maxBoundsViscosity: 1,
-    zoomControl: true,
-    attributionControl: true
-  });
-
-  // Satellite Map
-  const satellite = L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution: "Tiles © Esri",
-      minZoom: 13,
-      maxZoom: 19,
-      maxNativeZoom: 19,
-      noWrap: true,
-      crossOrigin: true
-    }
-  );
-
-  // Backup OpenStreetMap
-  const streetMap = L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-      attribution: "© OpenStreetMap contributors",
-      minZoom: 13,
-      maxZoom: 19,
-      maxNativeZoom: 19,
-      noWrap: true
-    }
-  );
-
-  // Start with Satellite
-  satellite.addTo(map);
-
-  let tileErrors = 0;
-  let fallbackActivated = false;
-
-  satellite.on("tileerror", function () {
-    tileErrors++;
-
-    if (tileErrors >= 3 && !fallbackActivated) {
-      fallbackActivated = true;
-
-      if (map.hasLayer(satellite)) {
-        map.removeLayer(satellite);
-      }
-
-      streetMap.addTo(map);
-
-      console.warn(
-        "Satellite unavailable. Switched to OpenStreetMap."
-      );
-
-      status(
-        "Satellite unavailable. Backup Map চালু হয়েছে।"
-      );
-    }
-  });
-
-  // Map Layer Selector
-  L.control.layers(
-    {
-      "Satellite View": satellite,
-      "Street Map": streetMap
-    },
-    null,
-    { position: "topright" }
-  ).addTo(map);
-
-  map.fitBounds(DAINHAT_BOUNDS);
-
-  markerLayer = L.layerGroup().addTo(map);
-
-  map.on("click", function (event) {
-    if (!isAdmin) return;
-
-    if (!DAINHAT_BOUNDS.contains(event.latlng)) return;
-
-    pendingLocation = {
-      lat: event.latlng.lat,
-      lng: event.latlng.lng
-    };
-
-    status(
-      "দাঁইহাট ম্যাপে Pin বসানো হয়েছে। এবার Save করো।"
-    );
-  });
-
-  map.attributionControl.setPrefix(false);
 }
-     
-    if (typeof L === "undefined" || !$("map")) {
-    
+       
   function normalize(value) {
     return String(value || "")
       .toLowerCase()
