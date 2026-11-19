@@ -99,11 +99,79 @@
     sdk = { ...firestore, ...authentication };
   }
 
-  function initializeMap() {
-     
-function initializeMap() {
+    function initializeMap() {
   if (typeof L === "undefined" || !$("map")) {
     throw new Error("Leaflet পাওয়া যায়নি।");
+  }
+
+  map = L.map("map", {
+    center: DAINHAT_CENTER,
+    zoom: 15,
+    minZoom: 13,
+    maxZoom: 19,
+    maxBounds: DAINHAT_BOUNDS,
+    maxBoundsViscosity: 1,
+    zoomControl: true,
+    attributionControl: true
+  });
+
+  const satellite = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      attribution: "Tiles © Esri",
+      maxZoom: 19,
+      maxNativeZoom: 19,
+      noWrap: true
+    }
+  );
+
+  const streetMap = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 19,
+      maxNativeZoom: 19,
+      noWrap: true
+    }
+  );
+
+  satellite.addTo(map);
+
+  let tileErrors = 0;
+
+  satellite.on("tileerror", function () {
+    tileErrors++;
+
+    if (tileErrors >= 3 && map.hasLayer(satellite)) {
+      map.removeLayer(satellite);
+      streetMap.addTo(map);
+      status("Satellite পাওয়া যাচ্ছে না। Street Map চালু হয়েছে।");
+    }
+  });
+
+  L.control.layers({
+    "Satellite View": satellite,
+    "Street Map": streetMap
+  }).addTo(map);
+
+  map.fitBounds(DAINHAT_BOUNDS);
+
+  markerLayer = L.layerGroup().addTo(map);
+
+  map.on("click", function (event) {
+    if (!isAdmin) return;
+    if (!DAINHAT_BOUNDS.contains(event.latlng)) return;
+
+    pendingLocation = {
+      lat: event.latlng.lat,
+      lng: event.latlng.lng
+    };
+
+    status("ম্যাপে Pin বসানো হয়েছে। এবার Save করো।");
+  });
+
+  map.attributionControl.setPrefix(false);
+    }
   }
 
   map = L.map("map", {
