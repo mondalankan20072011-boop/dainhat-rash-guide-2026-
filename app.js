@@ -99,8 +99,6 @@
     sdk = { ...firestore, ...authentication };
   }
 
-    function initializeMap() {
-    
 async function initializeFirebase() {
   const [app, firestore, authentication] = await Promise.all([
     import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-app.js`),
