@@ -5,6 +5,8 @@
    Satellite + Street Map Fallback
    Bengali + English Search
    Google Maps Directions
+   GPS Red Location Pin
+   Liquid Glass Action Buttons
 */
 
 (() => {
@@ -34,6 +36,7 @@
   const $ = id => document.getElementById(id);
 
   let db, auth, sdk, map, markerLayer;
+
   let places = [];
   let markers = new Map();
   let isAdmin = false;
@@ -41,6 +44,9 @@
   let pendingLocation = null;
   let pendingMarker = null;
   let activeCategory = "all";
+
+  // GPS MARKER
+  let userLocationMarker = null;
 
   function status(message) {
     if ($("adminHint")) {
@@ -76,12 +82,125 @@
 
   function directionURL(place) {
     const c = coordinates(place);
+
     const destination = c
       ? `${c.lat},${c.lng}`
       : place.name;
 
     return "https://www.google.com/maps/dir/?api=1&destination=" +
       encodeURIComponent(destination);
+  }
+
+  // LIQUID GLASS STYLES
+  function injectAppStyles() {
+    if ($("dainhat-extra-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "dainhat-extra-styles";
+
+    style.textContent = `
+      .place-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .place-actions button,
+      .place-actions a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 36px;
+        padding: 8px 13px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,.17);
+        background: rgba(255,255,255,.09);
+        color: inherit;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow: 0 4px 14px rgba(0,0,0,.14);
+        transition: background .2s, border-color .2s,
+                    transform .2s;
+      }
+
+      .place-actions button:hover,
+      .place-actions a:hover {
+        background: rgba(16,185,129,.19);
+        border-color: rgba(52,211,153,.7);
+        transform: translateY(-2px);
+      }
+
+      .place-actions button:active,
+      .place-actions a:active {
+        transform: scale(.96);
+      }
+
+      .place-actions .view-place-btn {
+        border-color: rgba(52,211,153,.4);
+      }
+
+      .place-actions .direction-btn {
+        border-color: rgba(96,165,250,.4);
+      }
+
+      .place-actions .edit-place-btn {
+        border-color: rgba(251,191,36,.4);
+      }
+
+      .place-actions button:disabled {
+        opacity: .55;
+        cursor: not-allowed;
+      }
+
+      /* RED GPS PIN */
+      .user-location-div-icon {
+        background: transparent !important;
+        border: none !important;
+      }
+
+      .user-location-pin {
+        width: 28px;
+        height: 28px;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ef4444;
+        border: 3px solid white;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        box-shadow: 0 3px 13px rgba(0,0,0,.5);
+      }
+
+      .user-location-pin span {
+        width: 9px;
+        height: 9px;
+        background: white;
+        border-radius: 50%;
+      }
+
+      @media(max-width:650px) {
+        .place-actions {
+          gap: 6px;
+        }
+
+        .place-actions button,
+        .place-actions a {
+          padding: 7px 10px;
+          min-height: 33px;
+          font-size: 11px;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
   }
 
   // FIREBASE INITIALIZATION
@@ -383,6 +502,7 @@
   function listenToPlaces() {
     sdk.onSnapshot(
       sdk.collection(db, COLLECTION),
+
       snapshot => {
         places = snapshot.docs.map(doc => ({
           ...doc.data(),
@@ -390,8 +510,10 @@
         }));
 
         renderPlaces();
+
         status("লোকেশন আপডেট হয়েছে। মোট " + places.length + " টি লোকেশন।");
       },
+
       error => {
         console.error("Firebase Read Error:", error);
         status("Firebase Read Error: " + error.message);
@@ -504,6 +626,7 @@
         );
 
         status("লোকেশন Update সফল হয়েছে।");
+
       } else {
         await sdk.addDoc(
           sdk.collection(db, COLLECTION),
@@ -638,6 +761,7 @@
       await sdk.signOut(auth);
       setAdminMode(false);
       status("Admin Logout হয়েছে।");
+
     } catch (error) {
       alert(error.message);
     }
@@ -659,109 +783,80 @@
     });
   }
 
-  // ALL EVENTS
-  function setupEvents() {
-    $("searchInput")?.addEventListener("input", renderPlaces);
-
-    $("placeForm")?.addEventListener("submit", savePlace);
-
-    $("deletePlaceBtn")?.addEventListener("click", deletePlace);
-
-    $("newPlaceBtn")?.addEventListener("click", resetForm);
-
-    $("adminToggle")?.addEventListener("click", () => {
-      ensureEmailField();
-      $("loginDialog")?.showModal();
-    });
-
-    $("loginForm")?.addEventListener("submit", loginAdmin);
-
-    $("cancelLogin")?.addEventListener("click", () => {
-      $("loginDialog")?.close();
-    });
-
-    $("logoutBtn")?.addEventListener("click", logoutAdmin);
-
-    $("locateBtn")?.addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        alert("Location Support নেই।");
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        position => {
-          const point = L.latLng(
-            position.coords.latitude,
-            position.coords.longitude
-          );
-
-          if (!DAINHAT_BOUNDS.contains(point)) {
-            alert("তোমার অবস্থান দাঁইহাট ম্যাপের বাইরে।");
-            return;
-          }
-
-          map.setView(point, 17);
-        },
-        () => alert("Location Permission চালু করো।")
-      );
-    });
-
-    $("placesList")?.addEventListener("click", event => {
-      const view = event.target.closest(".view-place-btn");
-      const edit = event.target.closest(".edit-place-btn");
-
-      if (view) {
-        showPlaceOnMap(view.dataset.id);
-        return;
-      }
-
-      if (edit && isAdmin) {
-        const place = places.find(p => p.id === edit.dataset.id);
-
-        if (place) {
-          fillForm(place);
-
-          if (coordinates(place)) {
-            showPlaceOnMap(place.id);
-          }
-        }
-      }
-    });
-
-    setupCategories();
-  }
-
-  // START APP
-  async function startApp() {
-    try {
-      status("App Loading হচ্ছে...");
-
-      await initializeFirebase();
-
-      initializeMap();
-
-      setupEvents();
-
-      // Load existing and newly added Firebase locations.
-      listenToPlaces();
-
-      ensureEmailField();
-
-      // Check admin login state.
-      sdk.onAuthStateChanged(auth, user => {
-        setAdminMode(
-          !!user && user.uid === ADMIN_UID
-        );
-      });
-
-      status("DAINHAT RASH GUIDE 2026 Ready!");
-
-    } catch (error) {
-      console.error("APP START ERROR:", error);
-      status("App Error: " + error.message);
+  // GPS LOCATION - RED PIN
+  function locateUser() {
+    if (!navigator.geolocation) {
+      alert("Location Support নেই।");
+      return;
     }
-  }
 
-  document.addEventListener("DOMContentLoaded", startApp);
+    const button = $("locateBtn");
 
-})();
+    if (button) {
+      button.disabled = true;
+      button.textContent = "লোকেশন খোঁজা হচ্ছে...";
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const point = L.latLng(
+          position.coords.latitude,
+          position.coords.longitude
+        );
+
+        if (!DAINHAT_BOUNDS.contains(point)) {
+          alert("তোমার অবস্থান দাঁইহাট ম্যাপের বাইরে।");
+
+          if (button) {
+            button.disabled = false;
+            button.textContent = "◎ আমার অবস্থান";
+          }
+
+          return;
+        }
+
+        const redPin = L.divIcon({
+          className: "user-location-div-icon",
+          html: '<div class="user-location-pin"><span></span></div>',
+          iconSize: [34, 42],
+          iconAnchor: [17, 42],
+          popupAnchor: [0, -38]
+        });
+
+        // Update existing GPS pin instead of creating duplicates
+        if (userLocationMarker) {
+          userLocationMarker.setLatLng(point);
+          userLocationMarker.setIcon(redPin);
+        } else {
+          userLocationMarker = L.marker(point, {
+            icon: redPin,
+            zIndexOffset: 1000
+          }).addTo(map);
+        }
+
+        userLocationMarker
+          .bindPopup("<strong>📍 তোমার বর্তমান অবস্থান</strong>")
+          .openPopup();
+
+        map.setView(point, 17);
+
+        if (button) {
+          button.disabled = false;
+          button.textContent = "◎ আমার অবস্থান";
+        }
+      },
+
+      error => {
+        console.error("GPS Error:", error);
+
+        const messages = {
+          1: "Location Permission চালু করো।",
+          2: "তোমার অবস্থান পাওয়া যাচ্ছে না।",
+          3: "GPS Timeout হয়েছে। আবার চেষ্টা করো।"
+        };
+
+        alert(messages[error.code] || "GPS Location Error হয়েছে।");
+
+        if (button) {
+          button.disabled = false;
+      
