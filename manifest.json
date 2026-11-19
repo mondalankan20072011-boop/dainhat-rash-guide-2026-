@@ -1,31 +1,12 @@
 {
-  "id": "./",
-  "name": "Dainhat Rash Guide 2026",
+  "name": "DAINHAT RASH GUIDE 2026",
   "short_name": "Dainhat Rash",
-  "description": "Dainhat Rash Guide - Local Road, Railway Stations, Bus Stands, Hospitals and Local Services.",
+  "description": "Explore Dainhat Ras Purnima locations and directions.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0b0f19",
-  "theme_color": "#0b0f19",
-  "lang": "bn-IN",
-  "categories": [
-    
-    "navigation",
-    "travel",
-    "utilities"
-  ],
-  "icons": [
-    {
-      "src": "./icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "background_color": "#062d22",
+  "theme_color": "#062d22",
+  "lang": "bn"
 }
