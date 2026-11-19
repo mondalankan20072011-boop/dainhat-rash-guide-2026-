@@ -2,7 +2,7 @@
 /* DAINHAT RASH GUIDE 2026
    Firebase + Leaflet
    Dainhat Only Map
-   Satellite View
+   Satellite + Street Map Fallback
    Bengali + English Search
    Google Maps Directions
 */
@@ -24,7 +24,6 @@
   const COLLECTION = "places";
   const VERSION = "10.14.1";
 
-  // DAINHAT MAP BOUNDARY
   const DAINHAT_CENTER = [23.6063, 88.1715];
 
   const DAINHAT_BOUNDS = L.latLngBounds(
@@ -40,6 +39,7 @@
   let isAdmin = false;
   let selectedId = null;
   let pendingLocation = null;
+  let pendingMarker = null;
   let activeCategory = "all";
 
   function status(message) {
@@ -84,6 +84,7 @@
       encodeURIComponent(destination);
   }
 
+  // FIREBASE INITIALIZATION
   async function initializeFirebase() {
     const [app, firestore, authentication] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-app.js`),
@@ -99,98 +100,101 @@
     sdk = { ...firestore, ...authentication };
   }
 
-async function initializeFirebase() {
-  const [app, firestore, authentication] = await Promise.all([
-    import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-app.js`),
-    import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-firestore.js`),
-    import(`https://www.gstatic.com/firebasejs/${VERSION}/firebase-auth.js`)
-  ]);
-
-  const firebaseApp = app.initializeApp(FIREBASE_CONFIG);
-  db = firestore.getFirestore(firebaseApp);
-  auth = authentication.getAuth(firebaseApp);
-  sdk = { ...firestore, ...authentication };
-}
-
-function initializeMap() {
-  if (typeof L === "undefined" || !$("map")) {
-    throw new Error("Leaflet পাওয়া যায়নি।");
-  }
-
-  map = L.map("map", {
-    center: DAINHAT_CENTER,
-    zoom: 15,
-    minZoom: 13,
-    maxZoom: 19,
-    maxBounds: DAINHAT_BOUNDS,
-    maxBoundsViscosity: 1,
-    zoomControl: true,
-    attributionControl: true
-  });
-
-  const satellite = L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    {
-      attribution: "Tiles © Esri",
-      maxZoom: 19,
-      maxNativeZoom: 19,
-      noWrap: true
+  // MAP INITIALIZATION
+  function initializeMap() {
+    if (typeof L === "undefined" || !$("map")) {
+      throw new Error("Leaflet পাওয়া যায়নি।");
     }
-  );
 
-  const streetMap = L.tileLayer(
-    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    {
-      attribution: "© OpenStreetMap contributors",
+    map = L.map("map", {
+      center: DAINHAT_CENTER,
+      zoom: 15,
+      minZoom: 13,
       maxZoom: 19,
-      maxNativeZoom: 19,
-      noWrap: true
-    }
-  );
+      maxBounds: DAINHAT_BOUNDS,
+      maxBoundsViscosity: 1,
+      zoomControl: true,
+      attributionControl: true
+    });
 
-  satellite.addTo(map);
+    const satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution: "Tiles © Esri",
+        maxZoom: 19,
+        maxNativeZoom: 19,
+        noWrap: true
+      }
+    );
 
-  let tileErrors = 0;
-  let fallbackActivated = false;
+    const streetMap = L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+        maxNativeZoom: 19,
+        noWrap: true
+      }
+    );
 
-  satellite.on("tileerror", function () {
-    tileErrors++;
+    satellite.addTo(map);
 
-    if (tileErrors >= 3 && !fallbackActivated) {
-      fallbackActivated = true;
+    let tileErrors = 0;
+    let fallbackActivated = false;
 
-      if (map.hasLayer(satellite)) {
-        map.removeLayer(satellite);
+    satellite.on("tileerror", () => {
+      tileErrors++;
+
+      if (tileErrors >= 3 && !fallbackActivated) {
+        fallbackActivated = true;
+
+        if (map.hasLayer(satellite)) {
+          map.removeLayer(satellite);
+        }
+
+        streetMap.addTo(map);
+        status("Satellite পাওয়া যাচ্ছে না। Street Map চালু হয়েছে।");
+      }
+    });
+
+    L.control.layers({
+      "Satellite View": satellite,
+      "Street Map": streetMap
+    }).addTo(map);
+
+    map.fitBounds(DAINHAT_BOUNDS);
+
+    markerLayer = L.layerGroup().addTo(map);
+
+    map.on("click", event => {
+      if (!isAdmin) return;
+
+      if (!DAINHAT_BOUNDS.contains(event.latlng)) {
+        status("শুধু দাঁইহাট এলাকার মধ্যে Pin বসানো যাবে।");
+        return;
       }
 
-      streetMap.addTo(map);
-      status("Satellite পাওয়া যাচ্ছে না। Street Map চালু হয়েছে।");
-    }
-  });
+      pendingLocation = {
+        lat: event.latlng.lat,
+        lng: event.latlng.lng
+      };
 
-  L.control.layers({
-    "Satellite View": satellite,
-    "Street Map": streetMap
-  }).addTo(map);
+      if (pendingMarker) {
+        map.removeLayer(pendingMarker);
+      }
 
-  map.fitBounds(DAINHAT_BOUNDS);
-  markerLayer = L.layerGroup().addTo(map);
+      pendingMarker = L.marker(event.latlng)
+        .addTo(map)
+        .bindPopup("নতুন Location")
+        .openPopup();
 
-  map.on("click", function (event) {
-    if (!isAdmin) return;
-    if (!DAINHAT_BOUNDS.contains(event.latlng)) return;
+      status("Pin বসানো হয়েছে। এবার Save Location চাপো।");
+    });
 
-    pendingLocation = {
-      lat: event.latlng.lat,
-      lng: event.latlng.lng
-    };
+    map.attributionControl.setPrefix(false);
+  }
 
-    status("ম্যাপে Pin বসানো হয়েছে। এবার Save করো।");
-  });
-
-  map.attributionControl.setPrefix(false);
-}
-       
+  // SEARCH
   function normalize(value) {
     return String(value || "")
       .toLowerCase()
@@ -254,6 +258,7 @@ function initializeMap() {
     );
   }
 
+  // MAP POPUP
   function createPopup(place) {
     const box = document.createElement("div");
 
@@ -278,15 +283,15 @@ function initializeMap() {
     return box;
   }
 
+  // RENDER MAP
   function renderMap() {
+    if (!markerLayer) return;
+
     markerLayer.clearLayers();
     markers.clear();
 
-    // Always show all saved Dainhat pins,
-    // regardless of search or category filters.
     places.forEach(place => {
       const c = coordinates(place);
-
       if (!c) return;
 
       const point = L.latLng(c.lat, c.lng);
@@ -302,6 +307,7 @@ function initializeMap() {
     });
   }
 
+  // RENDER LOCATION LIST
   function renderList(list) {
     const container = $("placesList");
     if (!container) return;
@@ -373,9 +379,35 @@ function initializeMap() {
     marker.openPopup();
   }
 
+  // FIREBASE REAL-TIME LISTENER
+  function listenToPlaces() {
+    sdk.onSnapshot(
+      sdk.collection(db, COLLECTION),
+      snapshot => {
+        places = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id
+        }));
+
+        renderPlaces();
+        status("লোকেশন আপডেট হয়েছে। মোট " + places.length + " টি লোকেশন।");
+      },
+      error => {
+        console.error("Firebase Read Error:", error);
+        status("Firebase Read Error: " + error.message);
+      }
+    );
+  }
+
+  // ADMIN FORM
   function fillForm(place) {
     selectedId = place.id;
     pendingLocation = null;
+
+    if (pendingMarker) {
+      map.removeLayer(pendingMarker);
+      pendingMarker = null;
+    }
 
     $("placeId").value = place.id;
     $("placeName").value = place.name || "";
@@ -396,9 +428,16 @@ function initializeMap() {
     selectedId = null;
     pendingLocation = null;
 
+    if (pendingMarker && map) {
+      map.removeLayer(pendingMarker);
+      pendingMarker = null;
+    }
+
     $("placeForm")?.reset();
 
-    if ($("placeId")) $("placeId").value = "";
+    if ($("placeId")) {
+      $("placeId").value = "";
+    }
 
     if ($("deletePlaceBtn")) {
       $("deletePlaceBtn").disabled = true;
@@ -407,10 +446,14 @@ function initializeMap() {
     status("নতুন লোকেশন যোগ করতে দাঁইহাট ম্যাপে Pin বসাও।");
   }
 
+  // SAVE LOCATION
   async function savePlace(event) {
     event.preventDefault();
 
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      alert("প্রথমে Admin Login করো।");
+      return;
+    }
 
     const name = $("placeName")?.value.trim();
 
@@ -434,6 +477,15 @@ function initializeMap() {
       return;
     }
 
+    const saveButton = $("placeForm")?.querySelector(
+      'button[type="submit"]'
+    );
+
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "Saving...";
+    }
+
     const data = {
       name,
       note: $("placeNote")?.value.trim() || "",
@@ -451,24 +503,36 @@ function initializeMap() {
           { merge: true }
         );
 
-        status("লোকেশন Update হয়েছে।");
+        status("লোকেশন Update সফল হয়েছে।");
       } else {
         await sdk.addDoc(
           sdk.collection(db, COLLECTION),
-          { ...data, createdAt: Date.now() }
+          {
+            ...data,
+            createdAt: Date.now()
+          }
         );
 
-        status("নতুন লোকেশন যোগ হয়েছে।");
+        status("নতুন লোকেশন Save সফল হয়েছে।");
       }
 
       resetForm();
 
     } catch (error) {
-      console.error(error);
+      console.error("SAVE ERROR:", error);
+
       alert("Save Error: " + error.message);
+      status("Save Error: " + error.message);
+
+    } finally {
+      if (saveButton) {
+        saveButton.disabled = false;
+        saveButton.textContent = "Save Location";
+      }
     }
   }
 
+  // DELETE LOCATION
   async function deletePlace() {
     if (!isAdmin || !selectedId) return;
 
@@ -486,10 +550,12 @@ function initializeMap() {
       status("লোকেশন Delete হয়েছে।");
 
     } catch (error) {
-      alert(error.message);
+      console.error(error);
+      alert("Delete Error: " + error.message);
     }
   }
 
+  // ADMIN EMAIL FIELD
   function ensureEmailField() {
     const form = $("loginForm");
 
@@ -513,6 +579,7 @@ function initializeMap() {
     }
   }
 
+  // ADMIN MODE
   function setAdminMode(value) {
     isAdmin = value;
 
@@ -521,7 +588,9 @@ function initializeMap() {
     $("adminToggle")?.classList.toggle("hidden", value);
 
     if ($("mapMode")) {
-      $("mapMode").textContent = value ? "ADMIN MODE" : "VIEW MODE";
+      $("mapMode").textContent = value
+        ? "ADMIN MODE"
+        : "VIEW MODE";
     }
 
     if (!value) resetForm();
@@ -529,6 +598,7 @@ function initializeMap() {
     renderPlaces();
   }
 
+  // ADMIN LOGIN
   async function loginAdmin(event) {
     event.preventDefault();
 
@@ -537,7 +607,9 @@ function initializeMap() {
 
     try {
       const result = await sdk.signInWithEmailAndPassword(
-        auth, email, password
+        auth,
+        email,
+        password
       );
 
       if (result.user.uid !== ADMIN_UID) {
@@ -562,11 +634,16 @@ function initializeMap() {
   }
 
   async function logoutAdmin() {
-    await sdk.signOut(auth);
-    setAdminMode(false);
-    status("Admin Logout হয়েছে।");
+    try {
+      await sdk.signOut(auth);
+      setAdminMode(false);
+      status("Admin Logout হয়েছে।");
+    } catch (error) {
+      alert(error.message);
+    }
   }
 
+  // CATEGORY FILTER
   function setupCategories() {
     document.querySelectorAll("[data-category]").forEach(button => {
       button.addEventListener("click", () => {
@@ -582,6 +659,7 @@ function initializeMap() {
     });
   }
 
+  // ALL EVENTS
   function setupEvents() {
     $("searchInput")?.addEventListener("input", renderPlaces);
 
@@ -653,6 +731,7 @@ function initializeMap() {
     setupCategories();
   }
 
+  // START APP
   async function startApp() {
     try {
       status("App Loading হচ্ছে...");
@@ -663,19 +742,22 @@ function initializeMap() {
 
       setupEvents();
 
-      // Existing Firebase places are preserved.
+      // Load existing and newly added Firebase locations.
       listenToPlaces();
 
       ensureEmailField();
 
+      // Check admin login state.
       sdk.onAuthStateChanged(auth, user => {
-        setAdminMode(!!user && user.uid === ADMIN_UID);
+        setAdminMode(
+          !!user && user.uid === ADMIN_UID
+        );
       });
 
       status("DAINHAT RASH GUIDE 2026 Ready!");
 
     } catch (error) {
-      console.error(error);
+      console.error("APP START ERROR:", error);
       status("App Error: " + error.message);
     }
   }
@@ -683,4 +765,3 @@ function initializeMap() {
   document.addEventListener("DOMContentLoaded", startApp);
 
 })();
-       
