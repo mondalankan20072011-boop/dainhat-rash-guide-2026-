@@ -520,3 +520,41 @@ footer{
   color: #03251b !important;
   border-color: #34d399 !important;
 }
+/* LOCATION ACTION BUTTONS - EXISTING LIQUID GLASS THEME */
+
+.place-card button,
+.place-card .button {
+  background: rgba(10, 55, 42, 0.58);
+  color: var(--mint);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 13px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 5px 16px rgba(0,0,0,.16);
+  transition: all .2s ease;
+}
+
+.place-card button:hover,
+.place-card .button:hover {
+  background: rgba(16, 185, 129, .18);
+  border-color: rgba(52, 211, 153, .55);
+  transform: translateY(-2px);
+}
+
+.place-card button:active,
+.place-card .button:active {
+  transform: scale(.96);
+}
+
+/* Keep existing theme on mobile */
+@media(max-width:650px) {
+  .place-card button,
+  .place-card .button {
+    padding: 8px 11px;
+    font-size: 11px;
+  }
+}
