@@ -1,12 +1,10 @@
-
 /* DAINHAT RASH GUIDE 2026
    Firebase + Leaflet
    Dainhat Only Map
    Satellite + Street Map Fallback
    Bengali + English Search
    Google Maps Directions
-   GPS Red Location Pin
-   Liquid Glass Action Buttons
+   GPS Red Pin + Liquid Glass Actions
 */
 
 (() => {
@@ -45,13 +43,99 @@
   let pendingMarker = null;
   let activeCategory = "all";
 
-  // GPS MARKER
+  // Only one GPS marker
   let userLocationMarker = null;
 
   function status(message) {
     if ($("adminHint")) {
       $("adminHint").textContent = message;
     }
+  }
+
+  // APP THEME STYLES
+  function injectAppStyles() {
+    if ($("dainhat-extra-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "dainhat-extra-styles";
+
+    style.textContent = `
+      .place-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .place-actions button,
+      .place-actions a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 7px 13px;
+        border: 1px solid var(--line, rgba(167,243,208,.17));
+        border-radius: 12px;
+        background: rgba(10,55,42,.72);
+        color: var(--mint, #a7f3d0);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 5px 16px rgba(0,0,0,.16);
+        transition: background .2s ease, border-color .2s ease,
+                    transform .2s ease;
+      }
+
+      .place-actions button:hover,
+      .place-actions a:hover {
+        background: rgba(16,185,129,.20);
+        border-color: var(--green, #10b981);
+        transform: translateY(-1px);
+      }
+
+      .place-actions button:active,
+      .place-actions a:active {
+        transform: scale(.96);
+      }
+
+      .place-actions button:disabled {
+        opacity: .5;
+        cursor: not-allowed;
+      }
+
+      .user-location-div-icon {
+        background: transparent !important;
+        border: 0 !important;
+      }
+
+      .user-location-pin {
+        position: relative;
+        width: 26px;
+        height: 26px;
+        margin: 3px 0 0 2px;
+        border: 3px solid #fff;
+        border-radius: 50% 50% 50% 0;
+        background: #ef3340;
+        transform: rotate(-45deg);
+        box-shadow: 0 3px 12px rgba(0,0,0,.5);
+      }
+
+      .user-location-pin span {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        top: 6px;
+        left: 6px;
+        border-radius: 50%;
+        background: #fff;
+      }
+    `;
+
+    document.head.appendChild(style);
   }
 
   function escapeHTML(value) {
@@ -89,118 +173,6 @@
 
     return "https://www.google.com/maps/dir/?api=1&destination=" +
       encodeURIComponent(destination);
-  }
-
-  // LIQUID GLASS STYLES
-  function injectAppStyles() {
-    if ($("dainhat-extra-styles")) return;
-
-    const style = document.createElement("style");
-    style.id = "dainhat-extra-styles";
-
-    style.textContent = `
-      .place-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .place-actions button,
-      .place-actions a {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-        min-height: 36px;
-        padding: 8px 13px;
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,.17);
-        background: rgba(255,255,255,.09);
-        color: inherit;
-        font-family: inherit;
-        font-size: 12px;
-        font-weight: 600;
-        text-decoration: none;
-        cursor: pointer;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        box-shadow: 0 4px 14px rgba(0,0,0,.14);
-        transition: background .2s, border-color .2s,
-                    transform .2s;
-      }
-
-      .place-actions button:hover,
-      .place-actions a:hover {
-        background: rgba(16,185,129,.19);
-        border-color: rgba(52,211,153,.7);
-        transform: translateY(-2px);
-      }
-
-      .place-actions button:active,
-      .place-actions a:active {
-        transform: scale(.96);
-      }
-
-      .place-actions .view-place-btn {
-        border-color: rgba(52,211,153,.4);
-      }
-
-      .place-actions .direction-btn {
-        border-color: rgba(96,165,250,.4);
-      }
-
-      .place-actions .edit-place-btn {
-        border-color: rgba(251,191,36,.4);
-      }
-
-      .place-actions button:disabled {
-        opacity: .55;
-        cursor: not-allowed;
-      }
-
-      /* RED GPS PIN */
-      .user-location-div-icon {
-        background: transparent !important;
-        border: none !important;
-      }
-
-      .user-location-pin {
-        width: 28px;
-        height: 28px;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #ef4444;
-        border: 3px solid white;
-        border-radius: 50% 50% 50% 0;
-        transform: rotate(-45deg);
-        box-shadow: 0 3px 13px rgba(0,0,0,.5);
-      }
-
-      .user-location-pin span {
-        width: 9px;
-        height: 9px;
-        background: white;
-        border-radius: 50%;
-      }
-
-      @media(max-width:650px) {
-        .place-actions {
-          gap: 6px;
-        }
-
-        .place-actions button,
-        .place-actions a {
-          padding: 7px 10px;
-          min-height: 33px;
-          font-size: 11px;
-        }
-      }
-    `;
-
-    document.head.appendChild(style);
   }
 
   // FIREBASE INITIALIZATION
@@ -411,6 +383,7 @@
 
     places.forEach(place => {
       const c = coordinates(place);
+
       if (!c) return;
 
       const point = L.latLng(c.lat, c.lng);
@@ -429,11 +402,13 @@
   // RENDER LOCATION LIST
   function renderList(list) {
     const container = $("placesList");
+
     if (!container) return;
 
     if (!list.length) {
       container.innerHTML =
         '<div class="empty-message">কোনো লোকেশন পাওয়া যায়নি।</div>';
+
       return;
     }
 
@@ -660,6 +635,7 @@
     if (!isAdmin || !selectedId) return;
 
     const place = places.find(p => p.id === selectedId);
+
     if (!place) return;
 
     if (!confirm(`"${place.name}" Delete করতে চাও?`)) return;
@@ -670,6 +646,7 @@
       );
 
       resetForm();
+
       status("লোকেশন Delete হয়েছে।");
 
     } catch (error) {
@@ -741,6 +718,7 @@
       }
 
       setAdminMode(true);
+
       $("loginDialog")?.close();
 
       status("Admin Login সফল হয়েছে।");
@@ -759,7 +737,9 @@
   async function logoutAdmin() {
     try {
       await sdk.signOut(auth);
+
       setAdminMode(false);
+
       status("Admin Logout হয়েছে।");
 
     } catch (error) {
@@ -778,12 +758,13 @@
         });
 
         button.classList.add("active");
+
         renderPlaces();
       });
     });
   }
 
-  // GPS LOCATION - RED PIN
+  // GPS LOCATION
   function locateUser() {
     if (!navigator.geolocation) {
       alert("Location Support নেই।");
@@ -818,12 +799,12 @@
         const redPin = L.divIcon({
           className: "user-location-div-icon",
           html: '<div class="user-location-pin"><span></span></div>',
-          iconSize: [34, 42],
-          iconAnchor: [17, 42],
+          iconSize: [30, 42],
+          iconAnchor: [15, 42],
           popupAnchor: [0, -38]
         });
 
-        // Update existing GPS pin instead of creating duplicates
+        // Update existing marker instead of creating duplicates
         if (userLocationMarker) {
           userLocationMarker.setLatLng(point);
           userLocationMarker.setIcon(redPin);
@@ -835,10 +816,12 @@
         }
 
         userLocationMarker
-          .bindPopup("<strong>📍 তোমার বর্তমান অবস্থান</strong>")
+          .bindPopup("<b>📍 তোমার বর্তমান অবস্থান</b>")
           .openPopup();
 
         map.setView(point, 17);
+
+        status("তোমার বর্তমান অবস্থান দেখানো হচ্ছে।");
 
         if (button) {
           button.disabled = false;
@@ -859,4 +842,26 @@
 
         if (button) {
           button.disabled = false;
-      
+          button.textContent = "◎ আমার অবস্থান";
+        }
+      },
+
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  }
+
+  // ALL EVENTS
+  function setupEvents() {
+    $("searchInput")?.addEventListener("input", renderPlaces);
+
+    $("placeForm")?.addEventListener("submit", savePlace);
+
+    $("deletePlaceBtn")?.addEventListener("click", deletePlace);
+
+    $("newPlaceBtn")?.addEventListener("click", resetForm);
+
+    $("adminToggle")?.addEventListener("cli
