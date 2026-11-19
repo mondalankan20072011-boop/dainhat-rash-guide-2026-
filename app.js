@@ -1,8 +1,9 @@
 
 /* DAINHAT RASH GUIDE 2026
    Firebase + Leaflet
-   Location List + Map Pins
-   Admin Add / Edit / Delete
+   Dainhat Only Map
+   Satellite View
+   Bengali + English Search
    Google Maps Directions
 */
 
@@ -22,6 +23,14 @@
   const ADMIN_UID = "2FaORIg7uBcX3bd1AhLAvth8fEP2";
   const COLLECTION = "places";
   const VERSION = "10.14.1";
+
+  // DAINHAT MAP BOUNDARY
+  const DAINHAT_CENTER = [23.6063, 88.1715];
+
+  const DAINHAT_BOUNDS = L.latLngBounds(
+    [23.5750, 88.1400],
+    [23.6370, 88.2050]
+  );
 
   const $ = id => document.getElementById(id);
 
@@ -49,20 +58,20 @@
     })[c]);
   }
 
-  function validCoordinates(lat, lng) {
-    return Number.isFinite(Number(lat)) &&
-      Number.isFinite(Number(lng)) &&
-      Math.abs(Number(lat)) <= 90 &&
-      Math.abs(Number(lng)) <= 180;
-  }
-
   function coordinates(place) {
-    if (!validCoordinates(place.lat, place.lng)) return null;
+    const lat = Number(place.lat);
+    const lng = Number(place.lng);
 
-    return {
-      lat: Number(place.lat),
-      lng: Number(place.lng)
-    };
+    if (
+      place.lat == null ||
+      place.lng == null ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
+    ) return null;
+
+    return { lat, lng };
   }
 
   function directionURL(place) {
@@ -87,129 +96,122 @@
     db = firestore.getFirestore(firebaseApp);
     auth = authentication.getAuth(firebaseApp);
 
-    sdk = {
-      ...firestore,
-      ...authentication
-    };
+    sdk = { ...firestore, ...authentication };
   }
 
   function initializeMap() {
     if (typeof L === "undefined" || !$("map")) {
-      throw new Error("Map বা Leaflet পাওয়া যায়নি।");
+      throw new Error("Leaflet পাওয়া যায়নি।");
     }
 
-    map = L.map("map").setView(
-      [23.6063, 88.1715],
-      15
-    );
+    map = L.map("map", {
+      center: DAINHAT_CENTER,
+      zoom: 15,
+      minZoom: 13,
+      maxZoom: 19,
+      maxBounds: DAINHAT_BOUNDS,
+      maxBoundsViscosity: 1,
+      zoomControl: true,
+      attributionControl: true
+    });
 
+    // Satellite imagery
     L.tileLayer(
-      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       {
+        minZoom: 13,
         maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
+        noWrap: true,
+        attribution: "Tiles © Esri"
       }
     ).addTo(map);
+
+    // Keep map inside Dainhat
+    map.setMaxBounds(DAINHAT_BOUNDS);
+    map.fitBounds(DAINHAT_BOUNDS);
 
     markerLayer = L.layerGroup().addTo(map);
 
     map.on("click", event => {
       if (!isAdmin) return;
 
+      const point = event.latlng;
+
+      if (!DAINHAT_BOUNDS.contains(point)) return;
+
       pendingLocation = {
-        lat: event.latlng.lat,
-        lng: event.latlng.lng
+        lat: point.lat,
+        lng: point.lng
       };
 
-      status("Map Pin বসানো হয়েছে। এবার Save করো।");
+      status("দাঁইহাট ম্যাপে Pin বসানো হয়েছে। এবার Save করো।");
     });
+
+    // Satellite attribution
+    map.attributionControl.setPrefix(false);
   }
 
-  async function seedInitialPlacesIfEmpty() {
-    const ref = sdk.collection(db, COLLECTION);
-    const snapshot = await sdk.getDocs(ref);
+  function normalize(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFC")
+      .replace(/[^\p{L}\p{N}]+/gu, "");
+  }
 
-    if (!snapshot.empty) return;
+  const aliases = {
+    "সাহাপাড়া নাগরিক মঞ্চ": [
+      "sahapara nagarik mancha",
+      "sahapara",
+      "nagarik mancha"
+    ],
+    "ছোটঠাকুরুন তলা": [
+      "chotothakurun tala",
+      "choto thakurun tala"
+    ],
+    "নটরাজ": ["natraj", "nataraj"],
+    "দাঁইহাট": ["dainhat", "dainhaat"]
+  };
 
-    const initialPlaces = [
-      {
-        name: "সাহাপাড়া নাগরিক মঞ্চ",
-        category: "প্যান্ডেল",
-        note: "",
-        lat: null,
-        lng: null
-      },
-      {
-        name: "ছোটঠাকুরুন তলা",
-        category: "প্যান্ডেল",
-        note: "",
-        lat: null,
-        lng: null
-      },
-      {
-        name: "নটরাজ",
-        category: "প্যান্ডেল",
-        note: "",
-        lat: null,
-        lng: null
-      },
-      {
-        name: "ব্যাংকের পাশে",
-        category: "অন্যান্য",
-        note: "",
-        lat: null,
-        lng: null
-      }
+  function matchesSearch(place, search) {
+    if (!search) return true;
+
+    const query = normalize(search);
+
+    const values = [
+      place.name,
+      place.note,
+      place.category,
+      ...(aliases[place.name] || [])
     ];
 
-    for (const place of initialPlaces) {
-      await sdk.addDoc(ref, {
-        ...place,
-        createdAt: Date.now()
-      });
-    }
+    return values.some(value =>
+      normalize(value).includes(query)
+    );
   }
 
-  function listenToPlaces() {
-    const ref = sdk.collection(db, COLLECTION);
+  function categoryMatches(place) {
+    if (activeCategory === "all") return true;
 
-    sdk.onSnapshot(ref, snapshot => {
-      places = snapshot.docs.map(document => {
-        const data = document.data();
+    const groups = {
+      "রাস মণ্ডপ": ["রাস মণ্ডপ", "প্যান্ডেল"],
+      "Railway Station": ["Railway Station", "রেলওয়ে স্টেশন"],
+      "Bus Stand": ["Bus Stand", "বাস স্ট্যান্ড"],
+      "Parking": ["Parking", "পার্কিং"],
+      "Hospital": ["Hospital", "হাসপাতাল"],
+      "Public Toilet": ["Public Toilet", "পাবলিক টয়লেট"]
+    };
 
-        return {
-          id: document.id,
-          ...data,
-          lat: data.lat == null ? null : Number(data.lat),
-          lng: data.lng == null ? null : Number(data.lng)
-        };
-      });
-
-      renderPlaces();
-
-    }, error => {
-      console.error(error);
-      status("Firebase Error: " + error.message);
-    });
+    return (groups[activeCategory] || [activeCategory])
+      .includes(place.category);
   }
 
   function filteredPlaces() {
-    const search = ($("searchInput")?.value || "")
-      .trim()
-      .toLowerCase();
+    const search = $("searchInput")?.value || "";
 
-    return places.filter(place => {
-      const matchesSearch =
-        !search ||
-        String(place.name || "").toLowerCase().includes(search) ||
-        String(place.note || "").toLowerCase().includes(search);
-
-      const matchesCategory =
-        activeCategory === "all" ||
-        place.category === activeCategory;
-
-      return matchesSearch && matchesCategory;
-    });
+    return places.filter(place =>
+      matchesSearch(place, search) &&
+      categoryMatches(place)
+    );
   }
 
   function createPopup(place) {
@@ -225,7 +227,7 @@
     link.href = directionURL(place);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = "Direction দেখুন";
+    link.textContent = "Direction দেখুন →";
 
     box.append(title);
 
@@ -236,15 +238,22 @@
     return box;
   }
 
-  function renderMap(list) {
+  function renderMap() {
     markerLayer.clearLayers();
     markers.clear();
 
-    list.forEach(place => {
+    // Always show all saved Dainhat pins,
+    // regardless of search or category filters.
+    places.forEach(place => {
       const c = coordinates(place);
+
       if (!c) return;
 
-      const marker = L.marker([c.lat, c.lng]);
+      const point = L.latLng(c.lat, c.lng);
+
+      if (!DAINHAT_BOUNDS.contains(point)) return;
+
+      const marker = L.marker(point);
 
       marker.bindPopup(createPopup(place));
       marker.addTo(markerLayer);
@@ -265,24 +274,22 @@
 
     container.innerHTML = list.map(place => `
       <div class="place-card">
+        <div class="place-icon">📍</div>
 
         <div class="place-info">
-          <h3>${escapeHTML(place.name)}</h3>
+          <strong>${escapeHTML(place.name)}</strong>
           <p>${escapeHTML(place.note || "")}</p>
           <small>${escapeHTML(place.category || "অন্যান্য")}</small>
         </div>
 
         <div class="place-actions">
-
-          <button
-            type="button"
+          <button type="button"
             class="view-place-btn"
             data-id="${escapeHTML(place.id)}">
-            ${coordinates(place) ? "Map দেখুন" : "Location নেই"}
+            Map
           </button>
 
-          <a
-            class="direction-btn"
+          <a class="direction-btn"
             href="${escapeHTML(directionURL(place))}"
             target="_blank"
             rel="noopener noreferrer">
@@ -290,14 +297,12 @@
           </a>
 
           ${isAdmin ? `
-            <button
-              type="button"
+            <button type="button"
               class="edit-place-btn"
               data-id="${escapeHTML(place.id)}">
               Edit
             </button>
           ` : ""}
-
         </div>
       </div>
     `).join("");
@@ -307,10 +312,10 @@
     const list = filteredPlaces();
 
     renderList(list);
-    renderMap(list);
+    renderMap();
 
     if ($("placeCount")) {
-      $("placeCount").textContent = list.length;
+      $("placeCount").textContent = list.length + " লোকেশন";
     }
   }
 
@@ -318,14 +323,13 @@
     const marker = markers.get(id);
 
     if (!marker) {
-      status("এই লোকেশনের Pin এখনও বসানো হয়নি।");
+      status("এই লোকেশনের সঠিক Pin পাওয়া যায়নি।");
       return;
     }
 
-    const place = places.find(p => p.id === id);
-    const c = coordinates(place);
+    const c = marker.getLatLng();
 
-    map.setView([c.lat, c.lng], 18);
+    map.setView(c, 18);
     marker.openPopup();
   }
 
@@ -338,15 +342,14 @@
     $("placeNote").value = place.note || "";
 
     if ($("placeCategory")) {
-      $("placeCategory").value =
-        place.category || "অন্যান্য";
+      $("placeCategory").value = place.category || "রাস মণ্ডপ";
     }
 
     if ($("deletePlaceBtn")) {
       $("deletePlaceBtn").disabled = false;
     }
 
-    status("Edit করতে পারো। Pin পরিবর্তন করতে Map-এ ক্লিক করো।");
+    status("Edit Mode চালু হয়েছে।");
   }
 
   function resetForm() {
@@ -361,7 +364,7 @@
       $("deletePlaceBtn").disabled = true;
     }
 
-    status("নতুন লোকেশন যোগ করতে Map-এ Pin বসাও।");
+    status("নতুন লোকেশন যোগ করতে দাঁইহাট ম্যাপে Pin বসাও।");
   }
 
   async function savePlace(event) {
@@ -381,8 +384,13 @@
     const lat = pendingLocation?.lat ?? oldPlace?.lat ?? null;
     const lng = pendingLocation?.lng ?? oldPlace?.lng ?? null;
 
-    if (!validCoordinates(lat, lng)) {
-      alert("প্রথমে Map-এ ক্লিক করে Pin বসাও।");
+    if (lat == null || lng == null) {
+      alert("প্রথমে ম্যাপে Pin বসাও।");
+      return;
+    }
+
+    if (!DAINHAT_BOUNDS.contains(L.latLng(lat, lng))) {
+      alert("শুধু দাঁইহাটের নির্দিষ্ট এলাকার মধ্যে Pin বসানো যাবে।");
       return;
     }
 
@@ -404,14 +412,10 @@
         );
 
         status("লোকেশন Update হয়েছে।");
-
       } else {
         await sdk.addDoc(
           sdk.collection(db, COLLECTION),
-          {
-            ...data,
-            createdAt: Date.now()
-          }
+          { ...data, createdAt: Date.now() }
         );
 
         status("নতুন লোকেশন যোগ হয়েছে।");
@@ -455,13 +459,9 @@
 
     wrapper.innerHTML = `
       <label for="adminEmail">Admin Email</label>
-      <input
-        type="email"
-        id="adminEmail"
+      <input type="email" id="adminEmail"
         placeholder="Admin Email"
-        autocomplete="username"
-        required
-      >
+        autocomplete="username" required>
     `;
 
     const password = $("adminPassword");
@@ -480,6 +480,10 @@
     $("logoutBtn")?.classList.toggle("hidden", !value);
     $("adminToggle")?.classList.toggle("hidden", value);
 
+    if ($("mapMode")) {
+      $("mapMode").textContent = value ? "ADMIN MODE" : "VIEW MODE";
+    }
+
     if (!value) resetForm();
 
     renderPlaces();
@@ -493,9 +497,7 @@
 
     try {
       const result = await sdk.signInWithEmailAndPassword(
-        auth,
-        email,
-        password
+        auth, email, password
       );
 
       if (result.user.uid !== ADMIN_UID) {
@@ -570,10 +572,17 @@
 
       navigator.geolocation.getCurrentPosition(
         position => {
-          map.setView([
+          const point = L.latLng(
             position.coords.latitude,
             position.coords.longitude
-          ], 17);
+          );
+
+          if (!DAINHAT_BOUNDS.contains(point)) {
+            alert("তোমার অবস্থান দাঁইহাট ম্যাপের বাইরে।");
+            return;
+          }
+
+          map.setView(point, 17);
         },
         () => alert("Location Permission চালু করো।")
       );
@@ -614,16 +623,13 @@
 
       setupEvents();
 
-      await seedInitialPlacesIfEmpty();
-
+      // Existing Firebase places are preserved.
       listenToPlaces();
 
       ensureEmailField();
 
       sdk.onAuthStateChanged(auth, user => {
-        setAdminMode(
-          !!user && user.uid === ADMIN_UID
-        );
+        setAdminMode(!!user && user.uid === ADMIN_UID);
       });
 
       status("DAINHAT RASH GUIDE 2026 Ready!");
@@ -637,4 +643,4 @@
   document.addEventListener("DOMContentLoaded", startApp);
 
 })();
-         
+       
