@@ -1,3 +1,4 @@
+
 /* DAINHAT RASH GUIDE 2026
    Firebase + Leaflet
    Dainhat Only Map
@@ -764,3 +765,4 @@
   document.addEventListener("DOMContentLoaded", startApp);
 
 })();
+           
