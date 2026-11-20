@@ -8,7 +8,7 @@
 
 (() => {
   "use strict";
-   let userLocationLayer = null;
+
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyAKXzJopkZNG_0L2jrkb5vmXgrPEqMhERg",
     authDomain: "dainhat-rash-guide.firebaseapp.com",
@@ -680,54 +680,12 @@
     });
 
     $("logoutBtn")?.addEventListener("click", logoutAdmin);
-      
-$("locateBtn")?.addEventListener("click", () => {
-  if (!navigator.geolocation) {
-    alert("Location Support নেই।");
-    return;
-  }
 
-  navigator.geolocation.getCurrentPosition(
-    position => {
-      const point = L.latLng(
-        position.coords.latitude,
-        position.coords.longitude
-      );
-
-      if (!DAINHAT_BOUNDS.contains(point)) {
-        alert("তোমার অবস্থান দাঁইহাট ম্যাপের বাইরে।");
+    $("locateBtn")?.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        alert("Location Support নেই।");
         return;
       }
-
-      if (userLocationLayer) {
-        map.removeLayer(userLocationLayer);
-      }
-
-      userLocationLayer = L.layerGroup([
-        L.circle(point, {
-          radius: 45,
-          color: "#2684ff",
-          weight: 2,
-          opacity: 0.9,
-          fillColor: "#2684ff",
-          fillOpacity: 0.15
-        }),
-
-        L.circleMarker(point, {
-          radius: 9,
-          color: "#ffffff",
-          weight: 3,
-          fillColor: "#2684ff",
-          fillOpacity: 1
-        })
-      ]).addTo(map);
-
-      map.setView(point, 17);
-    },
-    () => alert("Location Permission চালু করো।")
-  );
-});
-    }
 
       navigator.geolocation.getCurrentPosition(
         position => {
